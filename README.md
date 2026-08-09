@@ -14,7 +14,7 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 
 ## 2. Technology Stack
 
-- **Language**: Rust (1.74+)
+- **Language**: Rust (1.85+)
 - **Hashing**: SHA‑256 for all content hashing.
 - **Compression**: flate2 (zlib) or zstd for blob storage (deferred; games currently store their own compressed chunk bytes).
 - **Serialization**: Serde with bincode for object persistence.
@@ -111,7 +111,7 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 - **Unit tests**: Each module (object serialization, store read/write, diff logic) with mocked filesystem.
 - **Integration tests**: End‑to‑end tests: create repo, commit, checkout, branches, diff, gc, verify chunks.
 - **Performance benchmarks**: `cargo bench` – commit, load, and checkout for worlds of 100/1000/10000 chunks against a naive full-copy baseline.
-- **CI/CD**: GitHub Actions – formatting, clippy (`-D warnings`), tests, doctests, docs, MSRV (1.74) check, and coverage.
+- **CI/CD**: GitHub Actions – formatting, clippy (`-D warnings`), tests, doctests, docs, MSRV (1.85) check, and coverage.
 
 ---
 
