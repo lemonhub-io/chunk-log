@@ -1,7 +1,12 @@
 //! Command-line interface for chunklog.
 
-pub mod commit;
+/// The `chunklog init` command: initialize a repository.
 pub mod init;
+
+/// The `chunklog commit` command: commit staged chunks.
+pub mod commit;
+
+/// The `chunklog log` command: show commit history.
 pub mod log;
 
 use anyhow::Result;
@@ -26,6 +31,7 @@ enum Command {
     Log,
 }
 
+/// Runs the CLI, parsing arguments from the command line.
 pub fn run() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {

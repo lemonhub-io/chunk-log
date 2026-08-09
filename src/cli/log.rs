@@ -4,10 +4,11 @@ use anyhow::Result;
 
 use crate::repo::Repository;
 
+/// Runs the `log` subcommand.
 pub fn run() -> Result<()> {
     let repo = Repository::open(Path::new("."))?;
-    for (hash, message) in repo.log()? {
-        println!("{hash}  {message}");
+    for entry in repo.log()? {
+        println!("{}  {}", entry.hash, entry.message);
     }
     Ok(())
 }

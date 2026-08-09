@@ -9,6 +9,7 @@ use crate::repo::Repository;
 
 const STAGING_DIR: &str = ".chunklog/staging";
 
+/// Arguments for `chunklog commit`.
 #[derive(Args)]
 pub struct CommitArgs {
     /// Commit message
@@ -16,6 +17,7 @@ pub struct CommitArgs {
     message: String,
 }
 
+/// Runs the `commit` subcommand.
 pub fn run(args: CommitArgs) -> Result<()> {
     let mut repo = Repository::open(Path::new("."))?;
     let staging = repo.root().join(STAGING_DIR);

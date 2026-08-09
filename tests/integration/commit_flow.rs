@@ -20,8 +20,8 @@ fn init_commit_and_log() {
 
     let log = repo.log().unwrap();
     assert_eq!(log.len(), 1);
-    assert_eq!(log[0].0, hash);
-    assert_eq!(log[0].1, "first save");
+    assert_eq!(log[0].hash, hash);
+    assert_eq!(log[0].message, "first save");
 }
 
 #[test]
@@ -36,10 +36,10 @@ fn commit_chains_history() {
 
     let log = repo.log().unwrap();
     assert_eq!(log.len(), 2);
-    assert_eq!(log[0].0, second);
-    assert_eq!(log[0].1, "second");
-    assert_eq!(log[1].0, first);
-    assert_eq!(log[1].1, "first");
+    assert_eq!(log[0].hash, second);
+    assert_eq!(log[0].message, "second");
+    assert_eq!(log[1].hash, first);
+    assert_eq!(log[1].message, "first");
 }
 
 #[test]
@@ -65,19 +65,22 @@ fn identical_worlds_share_tree_and_blobs() {
     assert_ne!(first, second);
 
     let store = repo.store();
-    let Object::Commit(c1) = store.read(first).unwrap() else {
+    let read_commit = |hash| -> Object {
+        Object::from_bytes(&store.read(hash).unwrap()).unwrap()
+    };
+    let Object::Commit(c1) = read_commit(first) else {
         panic!("{first} is not a commit");
     };
-    let Object::Commit(c2) = store.read(second).unwrap() else {
+    let Object::Commit(c2) = read_commit(second) else {
         panic!("{second} is not a commit");
     };
     assert_eq!(c1.tree, c2.tree);
     assert_eq!(c2.parent, Some(first));
 
-    let Object::Tree(t1) = store.read(c1.tree).unwrap() else {
+    let Object::Tree(t1) = read_commit(c1.tree) else {
         panic!("{} is not a tree", c1.tree);
     };
-    let Object::Tree(t2) = store.read(c2.tree).unwrap() else {
+    let Object::Tree(t2) = read_commit(c2.tree) else {
         panic!("{} is not a tree", c2.tree);
     };
     assert_eq!(t1, t2);
@@ -93,5 +96,8 @@ fn log_after_open_walks_parent_chain() {
     }
     let repo = Repository::open(dir.path()).unwrap();
     let log = repo.log().unwrap();
-    assert_eq!(log.iter().map(|(_, m)| m.as_str()).collect::<Vec<_>>(), ["b", "a"]);
+    assert_eq!(
+        log.iter().map(|entry| entry.message.as_str()).collect::<Vec<_>>(),
+        ["b", "a"]
+    );
 }

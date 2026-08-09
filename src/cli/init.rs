@@ -5,12 +5,14 @@ use clap::Args;
 
 use crate::repo::Repository;
 
+/// Arguments for `chunklog init`.
 #[derive(Args)]
 pub struct InitArgs {
     /// Directory to initialize (defaults to the current directory)
     path: Option<PathBuf>,
 }
 
+/// Runs the `init` subcommand.
 pub fn run(args: InitArgs) -> Result<()> {
     let path = args.path.unwrap_or_else(|| PathBuf::from("."));
     Repository::init(&path)?;

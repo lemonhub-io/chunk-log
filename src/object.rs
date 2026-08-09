@@ -1,3 +1,5 @@
+//! The object model: content-addressed objects and hashes.
+
 use std::collections::BTreeMap;
 use std::fmt;
 
@@ -5,8 +7,14 @@ use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::xxh3_64;
 
 /// A content hash (XXH3 64-bit).
+///
+/// Hashes identify objects in a store and are derived from the object's
+/// serialized bytes, which makes them deterministic and content-addressed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
-pub struct Hash(pub [u8; 8]);
+pub struct Hash(
+    /// The raw hash bytes.
+    pub [u8; 8],
+);
 
 /// Chunk coordinates in a voxel world.
 pub type ChunkCoords = (i32, i32);
@@ -25,9 +33,13 @@ pub enum Object {
 /// Metadata for a single commit.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Commit {
+    /// Hash of the root tree of this commit.
     pub tree: Hash,
+    /// Hash of the parent commit, or `None` for the first commit.
     pub parent: Option<Hash>,
+    /// Unix timestamp (seconds) of the commit.
     pub timestamp: u64,
+    /// Commit message.
     pub message: String,
 }
 

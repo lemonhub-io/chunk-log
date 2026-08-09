@@ -15,4 +15,6 @@ serde = { version = "1", features = ["derive"] }
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
 [dev-dependencies]
+anyhow = "1"
 tempfile = "3"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
