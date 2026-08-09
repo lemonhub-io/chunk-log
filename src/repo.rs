@@ -1,6 +1,6 @@
 //! High-level repository operations.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -8,6 +8,8 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{bail, Context, Result};
 
+use crate::diff::WorldDiff;
+use crate::gc::GcStats;
 use crate::object::{parse_hash, ChunkCoords, Commit, Hash, Object};
 use crate::store::{FilesystemStore, ObjectStore};
 
@@ -165,13 +167,104 @@ impl<S: ObjectStore> Repository<S> {
     /// Lists `(coordinates, blob hash)` pairs of a commit's tree, sorted
     /// by coordinates. Useful for loading chunks on demand.
     pub fn chunk_hashes(&self, commit: Hash) -> Result<Vec<(ChunkCoords, Hash)>> {
-        let Object::Commit(commit_obj) = self.read_object(commit)? else {
-            bail!("object {commit} is not a commit");
+        Ok(self.tree_entries(commit)?.into_iter().collect())
+    }
+
+    /// Computes the difference between the worlds of two commits.
+    ///
+    /// `from` may be `None` to diff against an empty world. Results are
+    /// sorted by coordinates.
+    pub fn diff(&self, from: Option<Hash>, to: Hash) -> Result<WorldDiff> {
+        let from_tree = match from {
+            Some(hash) => self.tree_entries(hash)?,
+            None => BTreeMap::new(),
         };
-        let Object::Tree(entries) = self.read_object(commit_obj.tree)? else {
-            bail!("object {} is not a tree", commit_obj.tree);
-        };
-        Ok(entries.into_iter().collect())
+        let to_tree = self.tree_entries(to)?;
+
+        let mut added = Vec::new();
+        let mut modified = Vec::new();
+        for (coords, hash) in &to_tree {
+            match from_tree.get(coords) {
+                None => added.push((*coords, *hash)),
+                Some(old) if old != hash => modified.push((*coords, (*old, *hash))),
+                _ => {}
+            }
+        }
+        let mut removed = Vec::new();
+        for (coords, hash) in &from_tree {
+            if !to_tree.contains_key(coords) {
+                removed.push((*coords, *hash));
+            }
+        }
+        Ok(WorldDiff {
+            added,
+            modified,
+            removed,
+        })
+    }
+
+    /// Resolves a branch name or commit hash to a commit hash.
+    pub fn resolve(&self, target: &str) -> Result<Hash> {
+        if let Some(commit) = self.read_ref(target)? {
+            return Ok(commit);
+        }
+        let hash =
+            parse_hash(target).with_context(|| format!("no such branch or commit: {target}"))?;
+        match self.read_object(hash)? {
+            Object::Commit(_) => Ok(hash),
+            other => bail!("object {hash} is not a commit: {other:?}"),
+        }
+    }
+
+    /// Deletes all objects unreachable from HEAD and any branch ref.
+    ///
+    /// Traversal follows commits to their parent chains and trees to
+    /// their blobs. Fails loudly rather than deleting anything when the
+    /// store is corrupt.
+    pub fn collect_garbage(&self) -> Result<GcStats> {
+        let mut reachable = HashSet::new();
+        let mut commits: Vec<Hash> = Vec::new();
+        let mut trees: Vec<Hash> = Vec::new();
+        if let Some(hash) = self.head {
+            commits.push(hash);
+        }
+        for branch in self.branches()? {
+            if let Some(hash) = branch.commit {
+                commits.push(hash);
+            }
+        }
+        while let Some(hash) = commits.pop() {
+            if !reachable.insert(hash) {
+                continue;
+            }
+            let Object::Commit(commit) = self.read_object(hash)? else {
+                bail!("object {hash} is not a commit");
+            };
+            trees.push(commit.tree);
+            if let Some(parent) = commit.parent {
+                commits.push(parent);
+            }
+        }
+        while let Some(hash) = trees.pop() {
+            if !reachable.insert(hash) {
+                continue;
+            }
+            let Object::Tree(entries) = self.read_object(hash)? else {
+                bail!("object {hash} is not a tree");
+            };
+            reachable.extend(entries.values().copied());
+        }
+
+        let all = self.store.list()?;
+        let mut removed = 0;
+        for hash in all {
+            if !reachable.contains(&hash) {
+                self.store.delete(hash)?;
+                removed += 1;
+            }
+        }
+        let retained = self.store.list()?.len();
+        Ok(GcStats { removed, retained })
     }
 
     /// Creates a branch at the current HEAD.
@@ -320,6 +413,16 @@ impl<S: ObjectStore> Repository<S> {
 
     fn read_ref(&self, name: &str) -> Result<Option<Hash>> {
         read_branch_ref(&self.root, name)
+    }
+
+    fn tree_entries(&self, commit: Hash) -> Result<BTreeMap<ChunkCoords, Hash>> {
+        let Object::Commit(commit_obj) = self.read_object(commit)? else {
+            bail!("object {commit} is not a commit");
+        };
+        let Object::Tree(entries) = self.read_object(commit_obj.tree)? else {
+            bail!("object {} is not a tree", commit_obj.tree);
+        };
+        Ok(entries)
     }
 
     fn read_object(&self, hash: Hash) -> Result<Object> {

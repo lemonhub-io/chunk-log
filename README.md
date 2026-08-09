@@ -31,8 +31,8 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 | **object** | Defines `Blob` (compressed chunk data), `Tree` (mapping of chunk coordinates to blob hashes), `Commit` (metadata + root tree hash). Implements serialization/deserialization. |
 | **store** | `ObjectStore` – a key‑value store (filesystem backend initially) mapping hash → object bytes. Handles read/write, deduplication (write only if missing). |
 | **repo** | `Repository` – high‑level interface: open/init, head management, commit creation, checkout, branch operations. |
-| **diff** | Computes differences between two trees (changed chunks, added/removed). Used for incremental saving and `chunklog diff`. |
-| **gc** | Garbage collection – traverses all reachable commits and deletes unreferenced blobs/trees. |
+| **diff** | `WorldDiff` – added/modified/removed chunks between two commits (`Repository::diff`). Used for incremental saving and `chunklog diff`. |
+| **gc** | `GcStats` – mark-and-sweep over objects reachable from HEAD and all branch refs (`Repository::collect_garbage`). |
 | **cli** | Command‑line subcommands: `init`, `commit`, `log`, `checkout`, `branch`, `diff`, `gc`. |
 
 ---
@@ -81,9 +81,9 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 > a separate command would duplicate functionality.
 
 ### v0.3.0 – Diff & Garbage Collection
-- [ ] Tree diff (show changed chunks between two commits)
-- [ ] Garbage collection (mark‑and‑sweep over reachable objects)
-- [ ] CLI: `diff`, `gc`
+- [x] Tree diff (show changed chunks between two commits)
+- [x] Garbage collection (mark-and-sweep over reachable objects)
+- [x] CLI: `diff`, `gc`
 
 ### v1.0.0 – Stable API & Performance
 - [ ] Full API documentation

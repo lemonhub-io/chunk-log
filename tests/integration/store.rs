@@ -28,3 +28,20 @@ fn hash_is_content_addressed() {
     assert_eq!(hash.to_string().len(), 16);
     assert_ne!(hash, store.write(b"hello worlD").unwrap());
 }
+
+#[test]
+fn list_and_delete() {
+    let dir = tempdir().unwrap();
+    let store = FilesystemStore::new(dir.path());
+    let h1 = store.write(b"one").unwrap();
+    let h2 = store.write(b"two").unwrap();
+    let mut expected = vec![h1, h2];
+    expected.sort();
+    let mut listed = store.list().unwrap();
+    listed.sort();
+    assert_eq!(listed, expected);
+
+    store.delete(h1).unwrap();
+    assert_eq!(store.list().unwrap(), vec![h2]);
+    store.delete(h1).unwrap();
+}

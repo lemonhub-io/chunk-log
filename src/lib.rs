@@ -11,7 +11,7 @@
 //! - [`store`] – pluggable storage backends via the [`ObjectStore`] trait,
 //!   with a [`FilesystemStore`] implementation.
 //! - [`repo`] – the high-level [`Repository`] API: init, commit, load,
-//!   branches, checkout, log.
+//!   branches, checkout, diff, garbage collection, log.
 //! - [`cli`] – the `chunklog` command-line tool.
 //!
 //! # Example
@@ -37,10 +37,14 @@
 #![warn(missing_docs)]
 
 pub mod cli;
+pub mod diff;
+pub mod gc;
 pub mod object;
 pub mod repo;
 pub mod store;
 
+pub use diff::WorldDiff;
+pub use gc::GcStats;
 pub use object::{parse_hash, ChunkCoords, Commit, Hash, Object};
 pub use repo::{Branch, Checkout, LogEntry, Repository, World};
 pub use store::{FilesystemStore, ObjectStore};
