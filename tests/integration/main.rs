@@ -1,7 +1,10 @@
 mod branches;
 mod commit_flow;
 mod diff;
+mod faults;
 mod gc;
+mod incremental;
+mod integrity;
 mod memory_store;
 mod object;
 mod store;

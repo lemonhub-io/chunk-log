@@ -1,47 +1,70 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::time::Duration;
 
-use chunklog::{FilesystemStore, Repository};
+use chunklog::{ChangeSet, FilesystemStore, MemoryStore, Repository};
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use tempfile::{tempdir, TempDir};
 
 const CHUNK_BYTES: usize = 256;
 
-/// Builds a world of `size` distinct chunks on a square grid, each a
-/// deterministic 256-byte chunk payload.
 fn world(size: usize) -> HashMap<(i32, i32), Vec<u8>> {
-    let side = (size as f64).sqrt().ceil() as i32;
-    let mut chunks = HashMap::new();
-    let mut byte = 0u8;
-    for x in 0..side {
-        for z in 0..side {
-            let mut data = Vec::with_capacity(CHUNK_BYTES);
-            for _ in 0..CHUNK_BYTES {
-                data.push(byte.wrapping_mul(31).wrapping_add(7));
-                byte = byte.wrapping_add(1);
+    let world: HashMap<_, _> = (0..size)
+        .map(|index| {
+            let index_u64 = index as u64;
+            let mut payload = vec![0u8; CHUNK_BYTES];
+            payload[..8].copy_from_slice(&index_u64.to_be_bytes());
+            let mut state = index_u64 ^ 0x9e37_79b9_7f4a_7c15;
+            for byte in &mut payload[8..] {
+                state = state
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                *byte = (state >> 56) as u8;
             }
-            chunks.insert((x, z), data);
-        }
-    }
-    chunks
+            ((index as i32, (index as i32).wrapping_mul(3)), payload)
+        })
+        .collect();
+    assert_eq!(world.len(), size);
+    assert_eq!(world.values().collect::<HashSet<_>>().len(), size);
+    world
 }
 
-struct BenchRepo {
+struct FsRepo {
     repo: Repository<FilesystemStore>,
     _dir: TempDir,
 }
 
-/// A repository with one commit of `world`.
-fn setup(world: &HashMap<(i32, i32), Vec<u8>>) -> BenchRepo {
+fn setup_fs(world: &HashMap<(i32, i32), Vec<u8>>) -> FsRepo {
     let dir = tempdir().unwrap();
     let mut repo = Repository::init(dir.path()).unwrap();
-    repo.commit(world, "setup").unwrap();
-    BenchRepo { repo, _dir: dir }
+    repo.commit_snapshot(world, "setup").unwrap();
+    FsRepo { repo, _dir: dir }
 }
 
-fn commit_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("commit");
-    for size in [100, 1000, 10000] {
+fn full_snapshot_memory(c: &mut Criterion) {
+    let mut group = c.benchmark_group("algorithm/full_snapshot_memory");
+    for size in [100, 1_000, 10_000] {
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_with_input(BenchmarkId::new("chunks", size), &size, |b, &size| {
+            b.iter_batched(
+                || {
+                    let dir = tempdir().unwrap();
+                    let repo = Repository::init_with(MemoryStore::new(), dir.path()).unwrap();
+                    (repo, world(size), dir)
+                },
+                |(mut repo, world, _dir)| {
+                    repo.commit_snapshot(&world, "save").unwrap();
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+fn full_snapshot_filesystem(c: &mut Criterion) {
+    let mut group = c.benchmark_group("durable_io/full_snapshot_filesystem");
+    for size in [100, 1_000] {
         group.throughput(Throughput::Elements(size as u64));
         group.bench_with_input(BenchmarkId::new("chunks", size), &size, |b, &size| {
             b.iter_batched(
@@ -51,7 +74,7 @@ fn commit_bench(c: &mut Criterion) {
                     (repo, world(size), dir)
                 },
                 |(mut repo, world, _dir)| {
-                    repo.commit(&world, "save").unwrap();
+                    repo.commit_snapshot(&world, "save").unwrap();
                 },
                 BatchSize::SmallInput,
             );
@@ -60,71 +83,90 @@ fn commit_bench(c: &mut Criterion) {
     group.finish();
 }
 
-fn load_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("load");
-    for size in [100, 1000, 10000] {
-        group.throughput(Throughput::Elements(size as u64));
-        group.bench_with_input(BenchmarkId::new("chunks", size), &size, |b, &size| {
-            b.iter_batched(
-                || {
-                    let world = world(size);
-                    let setup = setup(&world);
-                    (setup, world)
-                },
-                |(setup, world)| {
-                    let loaded = setup.repo.load(setup.repo.head().unwrap()).unwrap();
-                    assert_eq!(loaded, world);
-                },
-                BatchSize::SmallInput,
-            );
-        });
-    }
-    group.finish();
-}
-
-fn checkout_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("checkout");
-    for size in [100, 1000, 10000] {
-        group.throughput(Throughput::Elements(size as u64));
-        group.bench_with_input(BenchmarkId::new("chunks", size), &size, |b, &size| {
-            b.iter_batched(
-                || {
-                    let world = world(size);
-                    setup(&world)
-                },
-                |mut setup| {
-                    setup.repo.checkout("main").unwrap();
-                },
-                BatchSize::SmallInput,
-            );
-        });
-    }
-    group.finish();
-}
-
-/// Baseline: a naive full copy of every chunk to its own file.
-fn naive_copy_bench(c: &mut Criterion) {
-    let mut group = c.benchmark_group("naive_copy");
-    for size in [100, 1000, 10000] {
-        group.throughput(Throughput::Elements(size as u64));
-        group.bench_with_input(BenchmarkId::new("chunks", size), &size, |b, &size| {
-            let world = world(size);
-            let dir = tempdir().unwrap();
+fn incremental_commit(c: &mut Criterion) {
+    let mut group = c.benchmark_group("durable_io/incremental_commit_k1");
+    for size in [100, 1_000] {
+        group.throughput(Throughput::Elements(1));
+        group.bench_with_input(BenchmarkId::new("world_chunks", size), &size, |b, &size| {
+            let mut setup = setup_fs(&world(size));
+            let mut generation = 0u64;
             b.iter(|| {
-                for ((x, z), data) in &world {
-                    fs::write(dir.path().join(format!("{x},{z}")), data).unwrap();
-                }
+                generation += 1;
+                let mut changes = ChangeSet::new();
+                changes.upsert((0, 0), generation.to_be_bytes().to_vec());
+                setup.repo.commit_changes(&changes, "one change").unwrap();
             });
         });
     }
     group.finish();
 }
 
-criterion_group!(
-    benches,
-    commit_bench,
-    load_bench,
-    checkout_bench,
-    naive_copy_bench
-);
+fn load_bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("durable_io/load");
+    for size in [100, 1_000] {
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_with_input(BenchmarkId::new("chunks", size), &size, |b, &size| {
+            let expected = world(size);
+            let setup = setup_fs(&expected);
+            let head = setup.repo.head().unwrap();
+            b.iter(|| {
+                let loaded = setup.repo.load(head).unwrap();
+                assert_eq!(loaded, expected);
+            });
+        });
+    }
+    group.finish();
+}
+
+fn checkout_bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("durable_io/logical_checkout");
+    for size in [100, 1_000] {
+        group.throughput(Throughput::Elements(1));
+        group.bench_with_input(BenchmarkId::new("world_chunks", size), &size, |b, &size| {
+            let mut setup = setup_fs(&world(size));
+            setup.repo.create_branch("feature").unwrap();
+            let mut on_main = true;
+            b.iter(|| {
+                let target = if on_main { "feature" } else { "main" };
+                setup.repo.checkout(target).unwrap();
+                on_main = !on_main;
+            });
+        });
+    }
+    group.finish();
+}
+
+fn naive_copy_bench(c: &mut Criterion) {
+    let mut group = c.benchmark_group("baseline/naive_full_snapshot");
+    for size in [100, 1_000] {
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_with_input(BenchmarkId::new("chunks", size), &size, |b, &size| {
+            b.iter_batched(
+                || (world(size), tempdir().unwrap()),
+                |(world, dir)| {
+                    for ((x, z), data) in &world {
+                        fs::write(dir.path().join(format!("{x},{z}")), data).unwrap();
+                    }
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
+criterion_group! {
+    name = benches;
+    config = Criterion::default()
+        .sample_size(10)
+        .warm_up_time(Duration::from_secs(1))
+        .measurement_time(Duration::from_secs(3));
+    targets =
+        full_snapshot_memory,
+        full_snapshot_filesystem,
+        incremental_commit,
+        load_bench,
+        checkout_bench,
+        naive_copy_bench
+}
 criterion_main!(benches);

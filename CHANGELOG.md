@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.2.0] - 2026-08-09
+
+### Changed
+
+- Replaced the flat postcard Tree with a versioned, typed canonical object format and a persistent 16-level coordinate radix Merkle tree.
+- Added `commit_snapshot` and incremental `commit_changes`; `commit` remains a full-snapshot compatibility alias.
+- Changed CLI staging to incremental patch semantics with `.remove` tombstones.
+- Added an explicit `.chunklog/FORMAT` marker; unversioned experimental repositories are rejected.
+- Updated lazy chunk access to `Repository::read_chunk` because store bytes are now typed canonical objects.
+
+### Security
+
+- Validate every branch-name entry point and enforce refs-directory containment.
+- Verify object hashes on reads and when reusing existing filesystem objects.
+- Use domain-separated Blob, Tree and Commit encodings.
+- Serialize repository mutations with a lock and atomically replace references.
+
+### Fixed
+
+- Corrected the benchmark generator so it produces exactly N unique payloads.
+- Corrected checkout and naive-copy benchmark setup.
+- Removed the unsupported claim that GC sweep is all-or-nothing; marking is fail-closed and sweep is retryable.
+
 All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),

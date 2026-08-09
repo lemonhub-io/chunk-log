@@ -1,6 +1,6 @@
 [package]
 name = "chunklog"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 rust-version = "1.86"
 license = "MIT OR Apache-2.0"
@@ -9,10 +9,9 @@ readme = "README.md"
 
 [dependencies]
 anyhow = "1"
+atomicwrites = "0.4.4"
 blake3 = "1"
 clap = { version = "4", features = ["derive"] }
-postcard = { version = "1", features = ["alloc"] }
-serde = { version = "1", features = ["derive"] }
 
 [dev-dependencies]
 anyhow = "1"

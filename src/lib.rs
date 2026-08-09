@@ -6,8 +6,8 @@
 //!
 //! # Architecture
 //!
-//! - [`object`] – the object model: [`Object`] (trees, commits),
-//!   [`struct@Hash`] and helpers. Chunk blobs are raw bytes in the store.
+//! - [`object`] – the typed canonical object model: blobs, persistent tree
+//!   nodes, commits, [`struct@Hash`] and helpers.
 //! - [`store`] – pluggable storage backends via the [`ObjectStore`] trait,
 //!   with a [`FilesystemStore`] implementation.
 //! - [`repo`] – the high-level [`Repository`] API: init, commit, load,
@@ -45,6 +45,6 @@ pub mod store;
 
 pub use diff::WorldDiff;
 pub use gc::GcStats;
-pub use object::{parse_hash, ChunkCoords, Commit, Hash, Object};
-pub use repo::{Branch, Checkout, LogEntry, Repository, World};
-pub use store::{FilesystemStore, ObjectStore};
+pub use object::{parse_hash, ChunkCoords, Commit, Hash, Object, TreeNode};
+pub use repo::{Branch, ChangeSet, Checkout, LogEntry, Repository, World};
+pub use store::{FilesystemStore, MemoryStore, ObjectStore};

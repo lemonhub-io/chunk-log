@@ -1,0 +1,14 @@
+backend,operation,n,k,median_ms,median_ci_low_ms,median_ci_high_ms
+memory,full_snapshot,100,,8.228,6.944,10.545
+memory,full_snapshot,1000,,22.936,20.849,24.464
+memory,full_snapshot,10000,,147.431,137.209,149.577
+filesystem,full_snapshot,100,,970.408,636.807,1069.092
+filesystem,full_snapshot,1000,,10763.069,10063.793,11356.041
+filesystem,incremental_commit,100,1,27.191,25.371,30.515
+filesystem,incremental_commit,1000,1,28.943,25.778,31.354
+filesystem,load,100,,47.257,43.179,48.955
+filesystem,load,1000,,608.815,549.815,682.236
+filesystem,logical_checkout,100,,8.099,7.797,8.590
+filesystem,logical_checkout,1000,,7.945,7.107,8.708
+baseline,naive_full_snapshot,100,,18.048,17.320,28.290
+baseline,naive_full_snapshot,1000,,299.824,262.367,321.357

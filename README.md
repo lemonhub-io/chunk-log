@@ -1,182 +1,153 @@
 # chunklog
 
-**Version control for voxel worlds** — a standalone Rust library and CLI,
-inspired by Git's object model, that treats a voxel world's chunks like
-files in a repository.
+Content-addressed version control for coordinate-addressed world state.
 
-`World` (chunk coordinates → compressed chunk data) goes in, commit history
-comes out. Any voxel engine can use it — LemonCraft, Veloren, Minetest,
-Godot, or your own.
-
-## Features
-
-- **Content-addressed storage** — chunk data is addressed by its BLAKE3
-  hash, so identical chunks are stored once, automatically.
-- **Incremental saves** — a commit of a mostly unchanged world only writes
-  the chunks that changed.
-- **Instant checkout** — switching versions is a reference move (O(1));
-  world data is loaded on demand.
-- **Native branching** — experiment on a branch, roll back, or delete
-  branches and let `gc` reclaim their objects.
-- **Pluggable storage** — `ObjectStore` trait with a filesystem backend;
-  memory or network backends are trivial to add.
-- **No engine coupling** — the library never touches game state; it accepts
-  and returns chunk bytes.
-- **CLI + library** — the `chunklog` command line for world management, or
-  the crate for direct integration.
+`chunklog` is a Rust library and CLI for versioning voxel chunks or any state that can be represented as `(i32, i32) → bytes`. It stores immutable, typed BLAKE3-addressed objects and uses a persistent coordinate radix tree so an incremental commit republishes only affected paths.
 
 ## Status
 
-Core workflow complete and covered by tests: init, commit, load, branches,
-checkout, diff, garbage collection. **0.1.0** is the first release.
+Version 0.2.0 is a research implementation. Core snapshot, incremental commit, load, diff, branch, logical checkout and garbage-collection workflows are implemented and tested. The on-disk format is explicitly versioned; pre-format-1 experimental repositories are rejected instead of being silently interpreted.
 
-> The original plan labeled development stages v0.1.0 → v1.0.0; that scheme
-> was abandoned and all scope ships as v0.1.0.
+The format-1 benchmark suite and controlled Luanti integration artifact have been regenerated. Archived results are under `paper-results/`; no historical timing from the former flat-tree implementation should be attributed to 0.2.0.
 
-## Getting started
+## Properties
 
-### As a library
+- **Typed content addressing:** Blob, Tree branch, Tree leaf and Commit objects have distinct canonical tags and BLAKE3 addresses.
+- **Verified reads:** object bytes are rehashed on read; silent blob or metadata corruption is rejected.
+- **Persistent coordinate tree:** changes copy only affected paths through a fixed-depth radix Merkle tree.
+- **Two commit modes:** full snapshots have Θ(N) scanning cost; change sets update only explicitly edited coordinates.
+- **Logical checkout:** switching HEAD does not materialize world payloads.
+- **Incremental CLI staging:** staged files are upserts and `.remove` contains explicit removals.
+- **Single-writer safety:** mutating operations use a repository lock and references use atomic replacement.
+- **Fail-closed marking:** GC verifies every reachable object before deletion begins; sweep is retryable but not transactional.
+- **Pluggable object storage:** custom backends implement the byte-level `ObjectStore` trait.
 
-```toml
-[dependencies]
-chunklog = "0.1"
-```
+## Library usage
 
 ```rust
-use chunklog::Repository;
+use chunklog::{ChangeSet, Repository};
 use std::collections::HashMap;
 
-// A world is chunk coordinates -> compressed chunk bytes.
-let mut world = HashMap::new();
-world.insert((0, 0), vec![1, 2, 3]);
+# let dir = tempfile::tempdir()?;
+let mut repo = Repository::init(dir.path())?;
 
-let mut repo = Repository::init("world.chunklog")?;
-let commit = repo.commit(&world, "initial save")?;
+let world = HashMap::from([
+    ((0, 0), vec![1, 2, 3]),
+    ((1, 0), vec![4, 5, 6]),
+]);
+let initial = repo.commit_snapshot(&world, "initial world")?;
 
-// ... later, restore the world of any commit:
-let restored = repo.load(commit)?;
-assert_eq!(restored, world);
+let mut changes = ChangeSet::new();
+changes.upsert((0, 0), vec![9, 9, 9]);
+changes.remove((1, 0));
+changes.upsert((2, 0), vec![7]);
+let edited = repo.commit_changes(&changes, "localized edit")?;
+
+assert_eq!(repo.load(initial)?, world);
+assert_eq!(repo.load(edited)?.len(), 2);
+# Ok::<(), anyhow::Error>(())
 ```
 
-See `examples/simple_game_integration.rs` for a complete game workflow
-(save, incremental save, rollback, branching, gc):
+`Repository::commit` remains an alias for `commit_snapshot` for compatibility. It traverses the complete input world and is not an O(k) API. Callers that know their edited coordinates should use `commit_changes`.
 
-```sh
-cargo run --example simple_game_integration
-```
+For lazy loading, call `chunk_hashes(commit)` and then `read_chunk(blob_hash)`. Direct `ObjectStore::read` returns canonical encoded object bytes, not a decoded chunk payload.
 
-### CLI
+## CLI
 
-```sh
-cargo install chunklog
-```
+```text
+chunklog init
 
-```sh
-cd myworld
-chunklog init                       # create .chunklog/
-# drop chunk files named "<x>,<z>" into .chunklog/staging/
-chunklog commit -m "explored the plains"
+# Upsert two chunks in the next commit:
+#   .chunklog/staging/0,0
+#   .chunklog/staging/1,-2
+
+# Explicitly remove coordinates, one per line:
+#   .chunklog/staging/.remove
+#   4,5
+#   -3,9
+
+chunklog commit -m "edited spawn"
 chunklog log
-chunklog branch                     # list branches (* = current)
-chunklog checkout -b experiment     # create and switch
-chunklog checkout main              # switch back
-chunklog diff                       # world changes vs. empty world
-chunklog diff main experiment       # or between two commits
-chunklog gc                         # delete unreachable objects
+chunklog branch experiment
+chunklog checkout experiment
+chunklog checkout main
+chunklog diff main experiment
+chunklog gc
 ```
+
+Staging is an incremental patch. Unmentioned coordinates remain unchanged. A coordinate may not be both an upsert file and an entry in `.remove`.
 
 | Command | Description |
 | --- | --- |
-| `init` | Initialize a repository (default branch `main`) |
-| `commit -m <msg>` | Commit chunk files staged in `.chunklog/staging/` (each named `<x>,<z>`) |
-| `log` | Show commit history |
-| `branch` | List branches; `branch <name>` creates; `branch -d <name>` deletes |
-| `checkout <target>` | Switch to a branch or commit hash; `-b` creates a new branch |
-| `diff [from] [to]` | Show added/modified/removed chunks (defaults: empty world → HEAD) |
-| `gc` | Remove objects unreachable from HEAD and all branches |
+| `init` | Initialize a format-1 repository on unborn branch `main` |
+| `commit -m <msg>` | Apply the staged upserts and removals to HEAD |
+| `log` | Walk first-parent history from HEAD |
+| `branch [name]` | List or create branches |
+| `branch -d <name>` | Delete a non-current branch |
+| `checkout <target>` | Move HEAD to a branch or full commit hash without loading chunks |
+| `checkout -b <name>` | Create and switch to a branch |
+| `diff [from] [to]` | List added, modified and removed coordinates |
+| `gc` | Delete objects unreachable from HEAD and all branches |
 
-## How it works
+## Object model
 
-### Object model
+Format 1 uses four canonical object forms:
 
-Three kinds of objects live in `.chunklog/objects/`, each addressed by the
-BLAKE3 hash of its content:
+- **Blob:** a length-prefixed opaque chunk payload;
+- **Tree branch:** a sorted sparse map from one coordinate nibble to child address;
+- **Tree leaf:** an exact coordinate and Blob address;
+- **Commit:** a root Tree address, optional parent, timestamp and message.
 
-- **Blob** — raw chunk bytes (as provided by the game, e.g. compressed).
-- **Tree** — mapping of chunk coordinates to blob hashes.
-- **Commit** — root tree hash, parent hash, timestamp, message.
+Coordinates occupy eight bytes (`x` then `z`) and are traversed as sixteen nibbles. A `k`-coordinate change affects the union of at most `16k` root-to-leaf paths; common prefixes reduce the actual number of new Tree nodes. This is different from the former flat Tree, which rewrote Θ(N) metadata on every save.
 
-Because hashes are content-derived, identical chunks produce identical
-blobs and are written only once — deduplication is a property of the
-addressing scheme, not a separate feature.
+The complete durable specification is in [FORMAT.md](FORMAT.md).
 
-### References
+## Cost model
 
-- `HEAD` is symbolic: `ref: refs/heads/main` on a branch, a bare commit
-  hash when detached.
-- Branches are files in `refs/heads/` pointing at commit hashes.
+Let N be the number of coordinates and k the number of explicit changes.
 
-### Checkout
+| Operation | Structural work | Payload work |
+| --- | --- | --- |
+| full snapshot commit | Θ(N) traversal and Tree construction | hashes N payloads |
+| incremental change-set commit | O(k·16) radix paths, less with shared prefixes | hashes k upserts |
+| logical checkout | independent of N | reads no Blob or Tree |
+| full load | Θ(N) Tree/Blob traversal | reads all N payloads |
+| diff (current implementation) | Θ(N₁ + N₂) materialized hash maps | reads no Blob payloads |
+| GC | linear in all reachable and stored objects | verifies reachable payload objects |
 
-`checkout` only moves references — it never copies data. World data is
-materialized separately: `load(commit)` returns the full world, or
-`chunk_hashes(commit)` lists `(coords, blob hash)` pairs so the game
-fetches only the chunks it needs.
+Absolute performance depends strongly on storage backend, filesystem, payload size and integrity-verification policy. Use `cargo bench`; do not reuse timing numbers from another machine or the 0.1 flat-tree prototype.
 
-### Storage backends
+## Consistency and recovery boundaries
 
-`ObjectStore` defines a minimal byte-level contract (`read`, `write`,
-`list`, `delete`). The default `FilesystemStore` writes objects atomically
-(temp file + rename). Custom backends (memory, network, cloud) implement
-the trait and are plugged in via `Repository::init_with` / `open_with`.
+- Objects are immutable and published before their reference.
+- Reference replacement is atomic at the file level.
+- Mutating operations are serialized by `.chunklog/LOCK`.
+- A process crash may leave unreachable objects or a stale lock; it cannot justify deleting a lock while another writer may still be active.
+- The default object backend uses atomic namespace publication but does not sync every object for sudden-power-loss durability.
+- GC performs no deletion after a marking error.
+- A failure during GC sweep may leave some unreachable objects deleted. Running GC again is safe; GC is not an all-or-nothing transaction.
 
-### Integrating with a game
+## Development and reproduction
 
-1. Keep your world as `HashMap<(i32, i32), Vec<u8>>` (chunk coordinates →
-   compressed chunk bytes).
-2. On save: `repo.commit(&world, message)`.
-3. On load: `repo.load(commit)` (eager) or `repo.chunk_hashes(commit)` +
-   `store.read(hash)` (lazy).
-
-Blobs are stored exactly as provided; decompression is the game's job.
-
-## Performance
-
-Indicative figures from the criterion suite (`cargo bench`) on a desktop;
-chunk payload = 256 bytes:
-
-| Operation | 100 chunks | 1,000 chunks | 10,000 chunks |
-| --- | ---: | ---: | ---: |
-| commit | ~8 ms | ~38 ms | ~310 ms |
-| load (full world) | ~3 ms | ~21 ms | ~200 ms |
-| checkout (reference move) | ~1.2 ms | ~1.3 ms | ~1.9 ms |
-| naive full copy (baseline) | ~14 ms | ~255 ms | ~2 s |
-
-Checkout is constant-time regardless of world size; commit time grows with
-the number of *changed* chunks, not with history length.
-
-## Roadmap
-
-- [ ] Merge / cherry-pick across branches
-- [ ] Remote synchronization (like `git push/pull`)
-- [ ] Multiplayer collaboration with lock-free merging
-- [ ] Delta compression for chunk blobs
-
-## Development
-
-```sh
+```text
 cargo test
+cargo test --all-targets --no-run
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all -- --check
 cargo doc --no-deps
 cargo bench
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution guide,
-[CHANGELOG.md](CHANGELOG.md) for release notes, and [SECURITY.md](SECURITY.md)
-for security reporting.
+`CLAIMS_EVIDENCE.md` tracks paper claims against code and evidence. `REPAIR_PLAN.md` records the remediation plan, and `REPAIR_AUDIT.md` records its final implementation and verification audit. The Luanti workload can be reproduced through `paper-workloads/run-luanti.ps1`.
+
+## Limitations
+
+- Single writer only; stale locks require operator confirmation before removal.
+- No merge, cherry-pick, remote synchronization or multiplayer protocol.
+- Diff currently expands both trees instead of recursively skipping shared roots.
+- No migration command for the former unversioned experimental format.
+- The Luanti artifact uses controlled singlenode generation, not a production-player edit history.
 
 ## License
 
-Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE),
-at your option.
+Licensed under either [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE), at your option.
