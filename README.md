@@ -46,15 +46,17 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 - Writes commit object, updates `HEAD` to new commit hash.
 
 ### 4.2 Checkout
-- Given a commit hash (or branch name), `Repository` reads its tree.
-- Returns a list of chunk hashes and their coordinates.
-- The game can then load only those blobs on demand (lazy loading).
-- No file copying – just pointer change.
+- Given a commit hash (or branch name), `Repository::checkout` moves `HEAD`
+  and the branch reference only — no data is copied.
+- World data is loaded separately: `Repository::load(commit)` returns all
+  chunks eagerly, or `Repository::chunk_hashes(commit)` lists
+  `(coords, blob hash)` pairs so the game can fetch blobs on demand (lazy loading).
 
 ### 4.3 Branching
-- Branch is a lightweight reference (file) pointing to a commit hash.
-- `checkout -b new_branch` creates a new branch at current HEAD.
-- `switch` changes the current branch reference.
+- A branch is a lightweight reference (file under `refs/heads/`) pointing to a commit hash.
+- `checkout -b new_branch` creates a new branch at current HEAD and switches to it.
+- `checkout` switches the current branch reference; checking out a commit
+  hash yields a detached HEAD.
 
 ---
 
@@ -70,10 +72,13 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 > `<x>,<z>`), commits them, then clears the staging directory.
 
 ### v0.2.0 – Checkout & Branching
-- [ ] Checkout (switch to any commit or branch)
-- [ ] Branch creation, deletion, listing
-- [ ] `HEAD` and refs management
-- [ ] CLI: `checkout`, `branch`, `switch`
+- [x] Checkout (switch to any commit or branch, including detached HEAD)
+- [x] Branch creation, deletion, listing
+- [x] `HEAD` and refs management (symbolic HEAD: `ref: refs/heads/<name>`)
+- [x] CLI: `checkout` (with `-b`), `branch`
+
+> `switch` was merged into `checkout` (`checkout -b` creates and switches);
+> a separate command would duplicate functionality.
 
 ### v0.3.0 – Diff & Garbage Collection
 - [ ] Tree diff (show changed chunks between two commits)

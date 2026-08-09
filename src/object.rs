@@ -19,11 +19,13 @@ pub struct Hash(
 /// Chunk coordinates in a voxel world.
 pub type ChunkCoords = (i32, i32);
 
-/// An immutable, content-addressed object in the store.
+/// An immutable, structured object in the store.
+///
+/// Chunk blobs are *not* part of this enum: they are stored as raw bytes
+/// directly in an [`ObjectStore`](crate::ObjectStore), and trees reference
+/// them by hash.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Object {
-    /// Compressed chunk data.
-    Blob(Vec<u8>),
     /// Mapping of chunk coordinates to blob hashes.
     Tree(BTreeMap<ChunkCoords, Hash>),
     /// A commit referencing a root tree.

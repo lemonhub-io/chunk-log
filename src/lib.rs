@@ -6,11 +6,12 @@
 //!
 //! # Architecture
 //!
-//! - [`object`] – the object model: [`Object`] (blobs, trees, commits),
-//!   [`struct@Hash`] and helpers.
+//! - [`object`] – the object model: [`Object`] (trees, commits),
+//!   [`struct@Hash`] and helpers. Chunk blobs are raw bytes in the store.
 //! - [`store`] – pluggable storage backends via the [`ObjectStore`] trait,
 //!   with a [`FilesystemStore`] implementation.
-//! - [`repo`] – the high-level [`Repository`] API: init, commit, log.
+//! - [`repo`] – the high-level [`Repository`] API: init, commit, load,
+//!   branches, checkout, log.
 //! - [`cli`] – the `chunklog` command-line tool.
 //!
 //! # Example
@@ -41,5 +42,5 @@ pub mod repo;
 pub mod store;
 
 pub use object::{parse_hash, ChunkCoords, Commit, Hash, Object};
-pub use repo::{LogEntry, Repository, World};
+pub use repo::{Branch, Checkout, LogEntry, Repository, World};
 pub use store::{FilesystemStore, ObjectStore};

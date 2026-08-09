@@ -5,7 +5,6 @@ use chunklog::{Commit, Hash, Object};
 #[test]
 fn object_roundtrip() {
     let objects = vec![
-        Object::Blob(vec![1, 2, 3]),
         Object::Tree(BTreeMap::from([((0, 0), Hash([7; 8]))])),
         Object::Commit(Commit {
             tree: Hash([1; 8]),
@@ -22,9 +21,9 @@ fn object_roundtrip() {
 
 #[test]
 fn hash_is_deterministic_and_content_addressed() {
-    let a = Object::Blob(vec![1, 2, 3]);
-    let b = Object::Blob(vec![1, 2, 3]);
-    let c = Object::Blob(vec![1, 2, 4]);
+    let a = Object::Tree(BTreeMap::from([((0, 0), Hash([1; 8]))]));
+    let b = Object::Tree(BTreeMap::from([((0, 0), Hash([1; 8]))]));
+    let c = Object::Tree(BTreeMap::from([((0, 0), Hash([2; 8]))]));
     assert_eq!(a.hash(), b.hash());
     assert_ne!(a.hash(), c.hash());
 }

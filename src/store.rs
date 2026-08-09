@@ -10,10 +10,10 @@ use crate::object::Hash;
 
 /// A content-addressed key-value store mapping hashes to object bytes.
 ///
-/// `write` derives the hash from the data itself, so identical data is
-/// stored only once. The hash returned by
-/// [`ObjectStore::write`] equals [`Object::hash`](crate::Object::hash)
-/// for the same serialized bytes.
+/// Chunk blobs are stored as raw bytes; structured objects (trees,
+/// commits) are stored serialized via
+/// [`Object::to_bytes`](crate::Object::to_bytes). `write` derives the
+/// hash from the data itself, so identical data is stored only once.
 pub trait ObjectStore {
     /// Reads the raw bytes stored under `hash`.
     fn read(&self, hash: Hash) -> Result<Vec<u8>>;

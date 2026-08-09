@@ -1,0 +1,15 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "kitesurf": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--wsEndpoint=wss://kitesurf.cloudflare.app/devtools/browser"
+      ],
+      "enabled": true
+    }
+  }
+}
