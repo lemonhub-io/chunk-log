@@ -2,7 +2,7 @@
 name = "chunklog"
 version = "0.1.0"
 edition = "2021"
-rust-version = "1.70"
+rust-version = "1.74"
 license = "MIT OR Apache-2.0"
 description = "A version-control library for voxel worlds"
 readme = "README.md"
@@ -10,11 +10,16 @@ readme = "README.md"
 [dependencies]
 anyhow = "1"
 bincode = "1"
-clap = { version = "~4.4", features = ["derive"] }
+clap = { version = "~4.5", features = ["derive"] }
 serde = { version = "1", features = ["derive"] }
-xxhash-rust = { version = "0.8", features = ["xxh3"] }
+sha2 = "0.10"
 
 [dev-dependencies]
 anyhow = "1"
+criterion = "0.5"
+sha2 = "0.10"
 tempfile = "3"
-xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[[bench]]
+name = "storage"
+harness = false

@@ -19,7 +19,10 @@ pub fn run(args: DiffArgs) -> Result<()> {
     let repo = Repository::open(Path::new("."))?;
     let (from, to) = match (&args.from, &args.to) {
         (Some(a), Some(b)) => (Some(repo.resolve(a)?), repo.resolve(b)?),
-        (Some(a), None) => (Some(repo.resolve(a)?), repo.head().context("no commits yet")?),
+        (Some(a), None) => (
+            Some(repo.resolve(a)?),
+            repo.head().context("no commits yet")?,
+        ),
         (None, Some(b)) => (None, repo.resolve(b)?),
         (None, None) => (None, repo.head().context("no commits yet")?),
     };

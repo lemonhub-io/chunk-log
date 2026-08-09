@@ -25,7 +25,7 @@ fn hash_is_content_addressed() {
     let dir = tempdir().unwrap();
     let store = FilesystemStore::new(dir.path());
     let hash = store.write(b"hello world").unwrap();
-    assert_eq!(hash.to_string().len(), 16);
+    assert_eq!(hash.to_string().len(), 64);
     assert_ne!(hash, store.write(b"hello worlD").unwrap());
 }
 

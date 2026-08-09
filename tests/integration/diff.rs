@@ -29,7 +29,7 @@ fn diff_detects_added_modified_removed() {
     assert_eq!(diff.added[0].0, (2, 2));
     assert_eq!(diff.modified.len(), 1);
     assert_eq!(diff.modified[0].0, (0, 0));
-    assert_ne!(diff.modified[0].1.0, diff.modified[0].1.1);
+    assert_ne!(diff.modified[0].1 .0, diff.modified[0].1 .1);
     assert_eq!(diff.removed.len(), 1);
     assert_eq!(diff.removed[0].0, (1, 1));
 }
@@ -59,7 +59,7 @@ fn diff_same_commit_is_empty() {
 fn diff_requires_commits() {
     let dir = tempdir().unwrap();
     let repo = Repository::init(dir.path()).unwrap();
-    assert!(repo.diff(None, Hash([0xff; 8])).is_err());
+    assert!(repo.diff(None, Hash([0xff; 32])).is_err());
 }
 
 #[test]

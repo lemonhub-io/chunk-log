@@ -3,8 +3,8 @@ use std::sync::RwLock;
 
 use anyhow::{anyhow, Result};
 use chunklog::{Hash, ObjectStore, Repository};
+use sha2::{Digest, Sha256};
 use tempfile::tempdir;
-use xxhash_rust::xxh3::xxh3_64;
 
 /// An in-memory [`ObjectStore`] used to prove that `Repository` works
 /// with any backend, not just the filesystem.
@@ -27,7 +27,7 @@ impl ObjectStore for MemoryStore {
     }
 
     fn write(&self, data: &[u8]) -> Result<Hash> {
-        let hash = Hash(xxh3_64(data).to_le_bytes());
+        let hash = Hash(Sha256::digest(data).into());
         self.0
             .write()
             .unwrap()

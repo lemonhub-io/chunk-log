@@ -97,7 +97,10 @@ impl<S: ObjectStore> Repository<S> {
         fs::create_dir_all(chunklog_dir.join("objects"))?;
         fs::create_dir_all(chunklog_dir.join("refs/heads"))?;
         fs::create_dir_all(path.join(STAGING_DIR))?;
-        fs::write(path.join(HEAD_FILE), format!("ref: refs/heads/{DEFAULT_BRANCH}"))?;
+        fs::write(
+            path.join(HEAD_FILE),
+            format!("ref: refs/heads/{DEFAULT_BRANCH}"),
+        )?;
         Ok(Repository {
             root: path.to_path_buf(),
             store,
@@ -426,7 +429,8 @@ impl<S: ObjectStore> Repository<S> {
     }
 
     fn read_object(&self, hash: Hash) -> Result<Object> {
-        Object::from_bytes(&self.store.read(hash)?).with_context(|| format!("corrupt object {hash}"))
+        Object::from_bytes(&self.store.read(hash)?)
+            .with_context(|| format!("corrupt object {hash}"))
     }
 }
 

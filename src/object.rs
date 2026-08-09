@@ -4,16 +4,16 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use xxhash_rust::xxh3::xxh3_64;
+use sha2::{Digest, Sha256};
 
-/// A content hash (XXH3 64-bit).
+/// A content hash (SHA-256).
 ///
 /// Hashes identify objects in a store and are derived from the object's
 /// serialized bytes, which makes them deterministic and content-addressed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct Hash(
     /// The raw hash bytes.
-    pub [u8; 8],
+    pub [u8; 32],
 );
 
 /// Chunk coordinates in a voxel world.
@@ -48,7 +48,7 @@ pub struct Commit {
 impl Object {
     /// Computes the content hash of this object.
     pub fn hash(&self) -> Hash {
-        Hash(xxh3_64(&self.to_bytes()).to_le_bytes())
+        Hash(Sha256::digest(self.to_bytes()).into())
     }
 
     /// Serializes this object to bytes.
@@ -71,12 +71,12 @@ impl fmt::Display for Hash {
     }
 }
 
-/// Parses a 16-character hex string into a `Hash`.
+/// Parses a 64-character hex string into a `Hash`.
 pub fn parse_hash(s: &str) -> anyhow::Result<Hash> {
-    if s.len() != 16 {
+    if s.len() != 64 {
         anyhow::bail!("invalid hash: {s}");
     }
-    let mut hash = [0u8; 8];
+    let mut hash = [0u8; 32];
     for (i, chunk) in s.as_bytes().chunks_exact(2).enumerate() {
         hash[i] = u8::from_str_radix(std::str::from_utf8(chunk)?, 16)?;
     }

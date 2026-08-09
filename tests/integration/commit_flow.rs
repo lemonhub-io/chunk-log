@@ -65,9 +65,7 @@ fn identical_worlds_share_tree_and_blobs() {
     assert_ne!(first, second);
 
     let store = repo.store();
-    let read_commit = |hash| -> Object {
-        Object::from_bytes(&store.read(hash).unwrap()).unwrap()
-    };
+    let read_commit = |hash| -> Object { Object::from_bytes(&store.read(hash).unwrap()).unwrap() };
     let Object::Commit(c1) = read_commit(first) else {
         panic!("{first} is not a commit");
     };
@@ -97,7 +95,9 @@ fn log_after_open_walks_parent_chain() {
     let repo = Repository::open(dir.path()).unwrap();
     let log = repo.log().unwrap();
     assert_eq!(
-        log.iter().map(|entry| entry.message.as_str()).collect::<Vec<_>>(),
+        log.iter()
+            .map(|entry| entry.message.as_str())
+            .collect::<Vec<_>>(),
         ["b", "a"]
     );
 }

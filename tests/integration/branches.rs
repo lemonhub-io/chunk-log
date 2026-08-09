@@ -136,7 +136,7 @@ fn checkout_unknown_target_fails() {
     repo.commit(&world(), "first").unwrap();
 
     assert!(repo.checkout("nope").is_err());
-    assert!(repo.checkout("ffffffffffffffff").is_err());
+    assert!(repo.checkout(&"f".repeat(64)).is_err());
 }
 
 #[test]

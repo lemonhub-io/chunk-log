@@ -5,7 +5,7 @@ use std::io::ErrorKind;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use xxhash_rust::xxh3::xxh3_64;
+use sha2::{Digest, Sha256};
 
 use crate::object::{parse_hash, Hash};
 
@@ -58,7 +58,7 @@ impl ObjectStore for FilesystemStore {
     }
 
     fn write(&self, data: &[u8]) -> Result<Hash> {
-        let hash = Hash(xxh3_64(data).to_le_bytes());
+        let hash = Hash(Sha256::digest(data).into());
         let path = self.objects_dir.join(hash.to_string());
         if path.exists() {
             return Ok(hash);
@@ -80,9 +80,10 @@ impl ObjectStore for FilesystemStore {
             if name.starts_with('.') {
                 continue;
             }
-            hashes.push(parse_hash(&name).with_context(|| {
-                format!("unexpected file in object store: {name}")
-            })?);
+            hashes.push(
+                parse_hash(&name)
+                    .with_context(|| format!("unexpected file in object store: {name}"))?,
+            );
         }
         Ok(hashes)
     }

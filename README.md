@@ -14,10 +14,10 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 
 ## 2. Technology Stack
 
-- **Language**: Rust (1.70+)
-- **Hashing**: XXH3 (fast, non‑cryptographic) for chunk content; SHA‑256 optional for integrity.
-- **Compression**: flate2 (zlib) or zstd for blob storage.
-- **Serialization**: Serde with bincode or postcard for object persistence.
+- **Language**: Rust (1.74+)
+- **Hashing**: SHA‑256 for all content hashing.
+- **Compression**: flate2 (zlib) or zstd for blob storage (deferred; games currently store their own compressed chunk bytes).
+- **Serialization**: Serde with bincode for object persistence.
 - **Concurrency**: Tokio or async‑std for future network features; currently sync with standard library.
 - **CLI**: clap for command‑line argument parsing.
 - **Testing**: Rust’s built‑in test harness + criterion for benchmarks.
@@ -60,9 +60,14 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 
 ---
 
-## 5. Development Milestones
+## 5. Development Status
 
-### v0.1.0 – Foundation (Core Storage + Commit)
+> **Versioning note**: This plan originally labeled each stage `v0.1.0` /
+> `v0.2.0` / `v0.3.0` / `v1.0.0`. That evolution scheme is **overturned**:
+> all scope below is completed in one cycle and ships as release
+> **v0.1.0**.
+
+### Foundation – Core Storage + Commit
 - [x] Object definitions (Blob, Tree, Commit)
 - [x] Filesystem object store (read/write by hash)
 - [x] Repository init, commit creation
@@ -71,7 +76,7 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 > `chunklog commit` reads chunk files from `.chunklog/staging/` (each file named
 > `<x>,<z>`), commits them, then clears the staging directory.
 
-### v0.2.0 – Checkout & Branching
+### Checkout & Branching
 - [x] Checkout (switch to any commit or branch, including detached HEAD)
 - [x] Branch creation, deletion, listing
 - [x] `HEAD` and refs management (symbolic HEAD: `ref: refs/heads/<name>`)
@@ -80,30 +85,33 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 > `switch` was merged into `checkout` (`checkout -b` creates and switches);
 > a separate command would duplicate functionality.
 
-### v0.3.0 – Diff & Garbage Collection
+### Diff & Garbage Collection
 - [x] Tree diff (show changed chunks between two commits)
 - [x] Garbage collection (mark-and-sweep over reachable objects)
 - [x] CLI: `diff`, `gc`
 
-### v1.0.0 – Stable API & Performance
-- [ ] Full API documentation
-- [ ] Benchmark suite (save/checkout times vs. naive copy)
-- [ ] Integration example with a simple game (e.g., a minimal voxel renderer)
-- [ ] CI/CD (GitHub Actions) with linting, tests, and coverage
+### Release v0.1.0 – Stable API & Performance
+- [x] Full API documentation (rustdoc, enforced by `missing_docs`)
+- [x] Hash upgrade to SHA‑256
+- [x] Benchmark suite (commit/load/checkout vs. naive copy)
+- [x] Integration example with a simple game (`examples/simple_game_integration.rs`)
+- [x] CI/CD (GitHub Actions) with linting, tests, and coverage
 
-### Future (v2.0)
+### Future
 - [ ] Merge / cherry‑pick across branches
 - [ ] Remote synchronization (like `git push/pull`)
 - [ ] Multiplayer collaboration with lock‑free merging
+- [ ] Delta compression for chunk blobs
+- [ ] Automatic pruning policies for commit history
 
 ---
 
 ## 6. Testing Strategy
 
 - **Unit tests**: Each module (object serialization, store read/write, diff logic) with mocked filesystem.
-- **Integration tests**: End‑to‑end CLI tests: create repo, commit, checkout, verify chunks.
-- **Performance benchmarks**: Measure commit and checkout time for worlds of varying size (100, 1000, 10000 chunks) against a baseline (full copy).
-- **Fuzzing**: (optional) verify hash collisions are handled correctly.
+- **Integration tests**: End‑to‑end tests: create repo, commit, checkout, branches, diff, gc, verify chunks.
+- **Performance benchmarks**: `cargo bench` – commit, load, and checkout for worlds of 100/1000/10000 chunks against a naive full-copy baseline.
+- **CI/CD**: GitHub Actions – formatting, clippy (`-D warnings`), tests, doctests, docs, MSRV (1.74) check, and coverage.
 
 ---
 
@@ -115,6 +123,7 @@ chunklog/
 ├── LICENSE-MIT
 ├── LICENSE-APACHE
 ├── README.md
+├── .github/workflows/ci.yml
 ├── src/
 │   ├── lib.rs
 │   ├── main.rs
@@ -127,10 +136,15 @@ chunklog/
 │       ├── mod.rs
 │       ├── init.rs
 │       ├── commit.rs
-│       └── ...
+│       ├── log.rs
+│       ├── branch.rs
+│       ├── checkout.rs
+│       ├── diff.rs
+│       └── gc.rs
+├── benches/
+│   └── storage.rs
 ├── tests/
-│   ├── integration/
-│   └── benchmarks/
+│   └── integration/
 └── examples/
     └── simple_game_integration.rs
 ```
@@ -139,9 +153,9 @@ chunklog/
 
 ## 8. Integration with Existing Engines
 
-- **LemonCraft**: Replace current world save routine with `Repository::commit()`; on load, use `Repository::load_tree()` and fetch chunks on demand.
+- **LemonCraft**: Replace current world save routine with `Repository::commit()`; on load, use `Repository::load()` or `Repository::chunk_hashes()` and fetch chunks on demand.
 - **Veloren**: Similar approach; adapt to Veloren's chunk data structures.
-- **Generic**: Provide a simple trait (`VoxelWorld`) that the library can work with, or just accept `HashMap<(i32,i32), Vec<u8>>`.
+- **Generic**: `World` is `HashMap<(i32,i32), Vec<u8>>` – chunk coordinates to compressed chunk data. See `examples/simple_game_integration.rs` for a complete walkthrough.
 
 ---
 
@@ -155,19 +169,15 @@ chunklog/
 
 ## 10. Risk Mitigation
 
-- **Hash collision**: Use 256‑bit hash (SHA‑256) for production; XXH3 for speed in development.
-- **Large commit history**: Provide `gc` and optional automatic pruning policies.
-- **File corruption**: Write objects atomically (write to temp file then rename) and verify checksum on read.
-- **Performance**: Early benchmarks ensure minimal overhead; consider memory mapping for large blobs.
+- **Hash collision**: 256‑bit SHA‑256 for all content hashing.
+- **Large commit history**: `chunklog gc` (mark-and-sweep) with optional automatic pruning policies planned.
+- **File corruption**: Objects are written atomically (temp file + rename).
+- **Performance**: Benchmark suite (`cargo bench`) tracks commit/load/checkout overhead; memory mapping for large blobs considered if needed.
 
 ---
 
-## 11. Next Steps (Immediate)
+## 11. Status
 
-1. Set up GitHub repository with the chosen name (`chunklog`).
-2. Add `Cargo.toml` with dependencies (`serde`, `flate2`, `xxhash-rust`, `clap`).
-3. Implement `object` module and `store` filesystem backend.
-4. Write unit tests for store and serialization.
-5. Implement `commit` command in CLI to verify end‑to‑end saving.
-
-This plan keeps the project focused, modular, and deliverable in incremental milestones, while leaving room for future enhancements.
+All planned scope is implemented and covered by tests; the crate is
+ready for its first release as **v0.1.0**. Remaining ideas are tracked
+under *Future* in section 5.
