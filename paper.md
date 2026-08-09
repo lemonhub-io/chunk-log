@@ -471,10 +471,10 @@ for Theorem 5's enumeration over a filesystem store).
 
 ## 6. Implementation
 
-chunklog is implemented in Rust (edition 2021, MSRV 1.85), roughly
+chunklog is implemented in Rust (edition 2021, MSRV 1.86), roughly
 700 lines of library code plus a ~270-line CLI, with
 `#![forbid(unsafe_code)]` and full API documentation enforced by
-`#![warn(missing_docs)]`. Serialization uses Serde + bincode; hashing
+`#![warn(missing_docs)]`. Serialization uses Serde + postcard; hashing
 uses BLAKE3 via the `blake3` crate; the CLI uses clap. Source layout
 mirrors the model:
 
@@ -613,8 +613,8 @@ commit serialization overhead and BLAKE3-length addressing). Section
 ### 7.4 Metadata overhead analysis
 
 With 256 B payloads, each blob file carries one BLAKE3 digest (32 B) in its
-address and bincode-free raw bytes; trees serialize
-≈ 8 B (coords) + 32 B (hash) + bincode framing per entry; commits are
+address and serialization-free raw bytes; trees serialize
+≈ 8 B (coords) + 32 B (hash) + postcard framing per entry; commits are
 ≈ 100 B. At N = 1024, R = 50, k = 10, the store holds 1,626 objects
 whose *measured* total byte count (2.48 MB) exceeds the 1,524 payloads'
 raw bytes (390 KB) because tree and commit objects dominate the

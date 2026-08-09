@@ -52,12 +52,12 @@ impl Object {
 
     /// Serializes this object to bytes.
     pub fn to_bytes(&self) -> Vec<u8> {
-        bincode::serialize(self).expect("serialization of an object cannot fail")
+        postcard::to_allocvec(self).expect("serialization of an object cannot fail")
     }
 
     /// Deserializes an object from bytes.
     pub fn from_bytes(bytes: &[u8]) -> anyhow::Result<Self> {
-        Ok(bincode::deserialize(bytes)?)
+        Ok(postcard::from_bytes(bytes)?)
     }
 }
 

@@ -5,7 +5,7 @@ library for voxel worlds.
 
 ## Getting started
 
-Prerequisites: Rust 1.85+ (see `rust-version` in `Cargo.toml`).
+Prerequisites: Rust 1.86+ (see `rust-version` in `Cargo.toml`).
 
 ```sh
 cargo build          # build the library and CLI
@@ -17,7 +17,7 @@ cargo bench          # benchmarks (criterion)
 cargo run --example simple_game_integration # end-to-end demo
 ```
 
-CI runs all of the above on every push, plus an MSRV (1.85) check and
+CI runs all of the above on every push, plus an MSRV (1.86) check and
 coverage. Make sure everything is green locally before opening a PR.
 
 ## Reporting issues
