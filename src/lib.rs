@@ -8,8 +8,9 @@
 //!
 //! - [`object`] – the typed canonical object model: blobs, persistent tree
 //!   nodes, commits, [`struct@Hash`] and helpers.
-//! - [`store`] – pluggable storage backends via the [`ObjectStore`] trait,
-//!   with a [`FilesystemStore`] implementation.
+//! - [`store`] – pluggable storage backends via the [`ObjectStore`] trait;
+//!   [`SqliteStore`] is the transactional default and [`FilesystemStore`]
+//!   retains the loose-file layout.
 //! - [`repo`] – the high-level [`Repository`] API: init, commit, load,
 //!   branches, checkout, diff, garbage collection, log.
 //! - [`cli`] – the `chunklog` command-line tool.
@@ -47,4 +48,4 @@ pub use diff::WorldDiff;
 pub use gc::GcStats;
 pub use object::{parse_hash, ChunkCoords, Commit, Hash, Object, TreeNode};
 pub use repo::{Branch, ChangeSet, Checkout, LogEntry, Repository, World};
-pub use store::{FilesystemStore, MemoryStore, ObjectStore};
+pub use store::{FilesystemStore, MemoryStore, ObjectStore, SqliteStore};

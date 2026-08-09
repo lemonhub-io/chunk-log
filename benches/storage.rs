@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::time::Duration;
 
-use chunklog::{ChangeSet, FilesystemStore, MemoryStore, Repository};
+use chunklog::{ChangeSet, FilesystemStore, MemoryStore, Repository, SqliteStore};
 use criterion::{criterion_group, criterion_main, BatchSize, BenchmarkId, Criterion, Throughput};
 use tempfile::{tempdir, TempDir};
 
@@ -29,16 +29,16 @@ fn world(size: usize) -> HashMap<(i32, i32), Vec<u8>> {
     world
 }
 
-struct FsRepo {
-    repo: Repository<FilesystemStore>,
+struct DurableRepo {
+    repo: Repository<SqliteStore>,
     _dir: TempDir,
 }
 
-fn setup_fs(world: &HashMap<(i32, i32), Vec<u8>>) -> FsRepo {
+fn setup_durable(world: &HashMap<(i32, i32), Vec<u8>>) -> DurableRepo {
     let dir = tempdir().unwrap();
     let mut repo = Repository::init(dir.path()).unwrap();
     repo.commit_snapshot(world, "setup").unwrap();
-    FsRepo { repo, _dir: dir }
+    DurableRepo { repo, _dir: dir }
 }
 
 fn full_snapshot_memory(c: &mut Criterion) {
@@ -62,9 +62,9 @@ fn full_snapshot_memory(c: &mut Criterion) {
     group.finish();
 }
 
-fn full_snapshot_filesystem(c: &mut Criterion) {
-    let mut group = c.benchmark_group("durable_io/full_snapshot_filesystem");
-    for size in [100, 1_000] {
+fn full_snapshot_sqlite(c: &mut Criterion) {
+    let mut group = c.benchmark_group("durable_io/full_snapshot_sqlite");
+    for size in [100, 1_000, 10_000] {
         group.throughput(Throughput::Elements(size as u64));
         group.bench_with_input(BenchmarkId::new("chunks", size), &size, |b, &size| {
             b.iter_batched(
@@ -83,12 +83,33 @@ fn full_snapshot_filesystem(c: &mut Criterion) {
     group.finish();
 }
 
+fn full_snapshot_loose(c: &mut Criterion) {
+    let mut group = c.benchmark_group("loose_io/full_snapshot_filesystem");
+    for size in [100, 1_000] {
+        group.throughput(Throughput::Elements(size as u64));
+        group.bench_with_input(BenchmarkId::new("chunks", size), &size, |b, &size| {
+            b.iter_batched(
+                || {
+                    let dir = tempdir().unwrap();
+                    let repo = Repository::<FilesystemStore>::init_loose(dir.path()).unwrap();
+                    (repo, world(size), dir)
+                },
+                |(mut repo, world, _dir)| {
+                    repo.commit_snapshot(&world, "save").unwrap();
+                },
+                BatchSize::SmallInput,
+            );
+        });
+    }
+    group.finish();
+}
+
 fn incremental_commit(c: &mut Criterion) {
     let mut group = c.benchmark_group("durable_io/incremental_commit_k1");
     for size in [100, 1_000] {
         group.throughput(Throughput::Elements(1));
         group.bench_with_input(BenchmarkId::new("world_chunks", size), &size, |b, &size| {
-            let mut setup = setup_fs(&world(size));
+            let mut setup = setup_durable(&world(size));
             let mut generation = 0u64;
             b.iter(|| {
                 generation += 1;
@@ -107,7 +128,7 @@ fn load_bench(c: &mut Criterion) {
         group.throughput(Throughput::Elements(size as u64));
         group.bench_with_input(BenchmarkId::new("chunks", size), &size, |b, &size| {
             let expected = world(size);
-            let setup = setup_fs(&expected);
+            let setup = setup_durable(&expected);
             let head = setup.repo.head().unwrap();
             b.iter(|| {
                 let loaded = setup.repo.load(head).unwrap();
@@ -123,7 +144,7 @@ fn checkout_bench(c: &mut Criterion) {
     for size in [100, 1_000] {
         group.throughput(Throughput::Elements(1));
         group.bench_with_input(BenchmarkId::new("world_chunks", size), &size, |b, &size| {
-            let mut setup = setup_fs(&world(size));
+            let mut setup = setup_durable(&world(size));
             setup.repo.create_branch("feature").unwrap();
             let mut on_main = true;
             b.iter(|| {
@@ -163,7 +184,8 @@ criterion_group! {
         .measurement_time(Duration::from_secs(3));
     targets =
         full_snapshot_memory,
-        full_snapshot_filesystem,
+        full_snapshot_sqlite,
+        full_snapshot_loose,
         incremental_commit,
         load_bench,
         checkout_bench,

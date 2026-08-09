@@ -15,13 +15,15 @@
 | 任意完整版本可比较 | 两个版本均可遍历为 coordinate→blob map | `diff`、`tree_entries` | diff 集成测试 | 已支持 | 不宣称基础理论创新；尚未实现 Merkle recursive diff |
 | GC soundness | writer lock 下固定根集合；验证并标记全部 Commit/Tree/Blob 后只删未标记对象 | `collect_garbage` | 分支 GC、篡改及故障注入测试 | 在单写者前提下已支持 | 定理显式列出完整 list 和哈希可靠性前提 |
 | GC marking fail-closed | 可达对象的读取、哈希、类型、解析或路径验证失败时尚未开始删除 | mark/sweep 阶段顺序 | `marking_failure_happens_before_any_deletion` | 已支持 | 保留 |
-| GC sweep 可重试但非事务 | 删除失败可能留下已删除的不可达对象；再次执行可完成清理 | 幂等 delete contract | `interrupted_sweep_is_safe_to_retry` | 已支持 | 删除 crash-atomicity 声明 |
+| GC sweep 后端语义 | SQLite 在一个事务中删除并可回滚；generic/loose store 仅要求幂等重试 | `collect_garbage`、batch hooks | SQLite batch 测试、`interrupted_sweep_is_safe_to_retry` | 已支持 | 分开陈述默认后端与通用 trait 保证 |
 | 分支路径不逃逸 refs | 所有入口验证名称，`ref_path` 验证直接父目录 | `validate_branch_name`、`ref_path` | path traversal 集成测试 | 已支持 | 保留 |
 | 引用更新是原子替换 | 同目录临时文件经同步后由 `atomicwrites` 替换目标 | `atomic_write` | 正常路径测试；库行为由依赖及平台语义承担 | 有条件支持 | 仅声称引用的原子替换；不声称整个 commit 是事务 |
+| 对象先于引用提交 | 一次 commit 的全部对象位于一个 SQLite 事务；事务成功后才发布 ref | `begin_batch`、`finish_object_batch`、`publish_commit` | SQLite commit/rollback 测试、注入 commit failure 后 HEAD 未发布 | 已支持 | 明确不是跨 SQLite/ref 的单一事务 |
 | 单写者互斥 | mutating operation 独占创建 `.chunklog/LOCK` | `RepositoryLock` | overlapping-writer 测试 | 已支持；进程崩溃可留下 stale lock | 在限制中明示 |
-| 仓库格式可识别 | `.chunklog/FORMAT = 1`；缺失/未知版本均拒绝打开 | init/open | unsupported/missing-format 测试 | 已支持 | 旧实验格式无迁移命令，明确拒绝 |
+| 仓库格式可识别 | `.chunklog/FORMAT = 2`；缺失、format-1、未知版本均拒绝打开 | init/open | unsupported/missing-format 测试 | 已支持 | 旧格式无迁移命令，明确拒绝 |
 | 历史存储增长 | 为唯一 Blob、Commit、Leaf 与受影响 Branch 的并集 | persistent radix Tree | `paper-results/structural-growth.md`，N=1,024、R=50、k=1/10/100 | 已支持并已测量 | 使用分类型实测和上界，删除旧闭式公式 |
-| checkout/commit/load 绝对性能 | 固定主机、Rust 1.89、Criterion 0.8、唯一 256-byte payload | `benches/storage.rs` | `paper-results/benchmark-summary.md` 与 CSV | 已测量 | 同时报告正结果与 file-per-node 初始导入的负结果 |
+| checkout/commit/load 绝对性能 | 固定主机、Rust 1.97.1、Criterion 0.8.2、唯一 256-byte payload | `benches/storage.rs` | `paper-results/benchmark-summary.md` 与 CSV | 已测量 | 报告 SQLite、memory、loose-file 与 raw baseline |
+| 初始导入瓶颈已消除 | 同版本 N=1,000 SQLite 与 loose-file 全快照对照 | `SqliteStore`、commit batch | 47.433 ms 对 10,427.392 ms | 已支持（单主机） | 陈述约 220×，不外推跨平台绝对性能 |
 | 真实引擎 payload 兼容性 | 官方 Luanti 5.16.1 生成 SQLite mapblock，按 `(x,z)` 聚合原始二进制 | `examples/luanti_workload.rs`、`paper-workloads/` | 2,023 mapblocks、289 columns，见归档结果 | 已支持（受控 singlenode） | 仅主张格式兼容和受控去重 |
 | 生产玩家历史上的收益 | 需要真实 terrain/edit trace | 尚无 | 尚无 | 未验证，非本文主张 | 明列为外部有效性限制 |
 | “首个完整实例化” | 需要严密检索范围及截止日期 | 不适用 | 现有相关工作足以反驳绝对措辞 | 不支持 | 已删除“首个”绝对主张 |

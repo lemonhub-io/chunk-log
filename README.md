@@ -6,9 +6,9 @@ Content-addressed version control for coordinate-addressed world state.
 
 ## Status
 
-Version 0.2.0 is a research implementation. Core snapshot, incremental commit, load, diff, branch, logical checkout and garbage-collection workflows are implemented and tested. The on-disk format is explicitly versioned; pre-format-1 experimental repositories are rejected instead of being silently interpreted.
+Version 0.3.0 is a research implementation. Core snapshot, incremental commit, load, diff, branch, logical checkout and garbage-collection workflows are implemented and tested. New repositories use a transactional SQLite content-addressed store; unsupported older formats are rejected instead of being silently interpreted.
 
-The format-1 benchmark suite and controlled Luanti integration artifact have been regenerated. Archived results are under `paper-results/`; no historical timing from the former flat-tree implementation should be attributed to 0.2.0.
+The format-2 benchmark suite and controlled Luanti integration artifact are archived under `paper-results/`. On the documented Windows/NTFS host, an N=1,000 initial snapshot fell from 10.427 s with loose objects to 47.433 ms with SQLite, about 220× faster.
 
 ## Properties
 
@@ -19,7 +19,8 @@ The format-1 benchmark suite and controlled Luanti integration artifact have bee
 - **Logical checkout:** switching HEAD does not materialize world payloads.
 - **Incremental CLI staging:** staged files are upserts and `.remove` contains explicit removals.
 - **Single-writer safety:** mutating operations use a repository lock and references use atomic replacement.
-- **Fail-closed marking:** GC verifies every reachable object before deletion begins; sweep is retryable but not transactional.
+- **Transactional default object writes:** all objects for one commit enter SQLite in one transaction before its ref is published.
+- **Fail-closed marking:** GC verifies every reachable object before deletion begins; SQLite sweep is transactional, while generic stores retain backend-specific semantics.
 - **Pluggable object storage:** custom backends implement the byte-level `ObjectStore` trait.
 
 ## Library usage
@@ -79,7 +80,7 @@ Staging is an incremental patch. Unmentioned coordinates remain unchanged. A coo
 
 | Command | Description |
 | --- | --- |
-| `init` | Initialize a format-1 repository on unborn branch `main` |
+| `init` | Initialize a format-2 SQLite repository on unborn branch `main` |
 | `commit -m <msg>` | Apply the staged upserts and removals to HEAD |
 | `log` | Walk first-parent history from HEAD |
 | `branch [name]` | List or create branches |
@@ -91,7 +92,7 @@ Staging is an incremental patch. Unmentioned coordinates remain unchanged. A coo
 
 ## Object model
 
-Format 1 uses four canonical object forms:
+Format 2 uses canonical object wire version 1 with four object forms:
 
 - **Blob:** a length-prefixed opaque chunk payload;
 - **Tree branch:** a sorted sparse map from one coordinate nibble to child address;
@@ -115,17 +116,25 @@ Let N be the number of coordinates and k the number of explicit changes.
 | diff (current implementation) | Θ(N₁ + N₂) materialized hash maps | reads no Blob payloads |
 | GC | linear in all reachable and stored objects | verifies reachable payload objects |
 
-Absolute performance depends strongly on storage backend, filesystem, payload size and integrity-verification policy. Use `cargo bench`; do not reuse timing numbers from another machine or the 0.1 flat-tree prototype.
+Absolute performance depends strongly on storage backend, filesystem, payload size and integrity-verification policy. The archived single-host medians for the default SQLite store are:
+
+| Operation | N=100 | N=1,000 | N=10,000 |
+| --- | ---: | ---: | ---: |
+| initial full snapshot | 14.021 ms | 47.433 ms | 1.156 s |
+| k=1 incremental commit | 10.446 ms | 13.577 ms | — |
+| full load | 21.221 ms | 222.167 ms | — |
+
+Use `cargo bench` for the target machine; these measurements do not establish cross-platform absolute performance.
 
 ## Consistency and recovery boundaries
 
-- Objects are immutable and published before their reference.
+- Objects are immutable. The default backend commits one SQLite object transaction before publishing the reference.
 - Reference replacement is atomic at the file level.
 - Mutating operations are serialized by `.chunklog/LOCK`.
 - A process crash may leave unreachable objects or a stale lock; it cannot justify deleting a lock while another writer may still be active.
-- The default object backend uses atomic namespace publication but does not sync every object for sudden-power-loss durability.
+- SQLite uses rollback journaling and `synchronous=FULL`; the SQLite transaction and filesystem ref replacement are still not one cross-file transaction.
 - GC performs no deletion after a marking error.
-- A failure during GC sweep may leave some unreachable objects deleted. Running GC again is safe; GC is not an all-or-nothing transaction.
+- SQLite GC deletes are one transaction. Loose/custom stores may leave a partial sweep and must be safe to retry.
 
 ## Development and reproduction
 
@@ -145,7 +154,7 @@ cargo bench
 - Single writer only; stale locks require operator confirmation before removal.
 - No merge, cherry-pick, remote synchronization or multiplayer protocol.
 - Diff currently expands both trees instead of recursively skipping shared roots.
-- No migration command for the former unversioned experimental format.
+- No migration command for the former unversioned or format-1 loose repository layout.
 - The Luanti artifact uses controlled singlenode generation, not a production-player edit history.
 
 ## License

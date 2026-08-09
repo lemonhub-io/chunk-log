@@ -4,11 +4,12 @@ use std::collections::HashMap;
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::RwLock;
+use std::sync::{Mutex, MutexGuard, RwLock};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
+use rusqlite::{params, Connection, OptionalExtension};
 
 use crate::object::{parse_hash, Hash};
 
@@ -40,6 +41,25 @@ pub trait ObjectStore {
     /// Deletes the object stored under `hash`. Deleting a missing object
     /// is a no-op.
     fn delete(&self, hash: Hash) -> Result<()>;
+
+    /// Starts an object-write batch.
+    ///
+    /// Stores without transactional batching may keep the default no-op.
+    fn begin_batch(&self) -> Result<()> {
+        Ok(())
+    }
+
+    /// Makes the current object-write batch visible and durable according to
+    /// the backend's configured durability mode.
+    fn commit_batch(&self) -> Result<()> {
+        Ok(())
+    }
+
+    /// Discards the current object-write batch. This must be safe to call
+    /// after an operation fails, including when no batch is active.
+    fn rollback_batch(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// A verified in-memory object store for tests, simulations and
@@ -187,5 +207,132 @@ impl ObjectStore for FilesystemStore {
             Err(e) if e.kind() == ErrorKind::NotFound => Ok(()),
             Err(e) => Err(e.into()),
         }
+    }
+}
+
+/// A verified SQLite-backed content-addressed object store.
+///
+/// All objects share one database instead of creating one filesystem entry per
+/// Merkle node. Repository commits use [`ObjectStore::begin_batch`] and
+/// [`ObjectStore::commit_batch`] so thousands of inserts require one SQLite
+/// transaction. The database uses rollback journaling and `synchronous=FULL`;
+/// object rows are committed before repository refs are published.
+pub struct SqliteStore {
+    connection: Mutex<Connection>,
+}
+
+impl SqliteStore {
+    /// Opens or creates a SQLite object database at `path`.
+    pub fn new(path: impl AsRef<Path>) -> Result<Self> {
+        let path = path.as_ref();
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let connection = Connection::open(path)
+            .with_context(|| format!("failed to open SQLite object store {}", path.display()))?;
+        connection.busy_timeout(std::time::Duration::from_secs(30))?;
+        connection.execute_batch(
+            "PRAGMA journal_mode=DELETE;
+             PRAGMA synchronous=FULL;
+             PRAGMA temp_store=MEMORY;
+             CREATE TABLE IF NOT EXISTS objects (
+                 hash BLOB PRIMARY KEY NOT NULL CHECK(length(hash) = 32),
+                 data BLOB NOT NULL
+             ) WITHOUT ROWID;",
+        )?;
+        Ok(Self {
+            connection: Mutex::new(connection),
+        })
+    }
+
+    fn connection(&self) -> Result<MutexGuard<'_, Connection>> {
+        self.connection
+            .lock()
+            .map_err(|_| anyhow::anyhow!("SQLite object-store lock poisoned"))
+    }
+}
+
+impl ObjectStore for SqliteStore {
+    fn read(&self, hash: Hash) -> Result<Vec<u8>> {
+        let connection = self.connection()?;
+        let bytes = connection
+            .query_row(
+                "SELECT data FROM objects WHERE hash = ?1",
+                params![&hash.0[..]],
+                |row| row.get::<_, Vec<u8>>(0),
+            )
+            .optional()?
+            .with_context(|| format!("object {hash} not found"))?;
+        hash.verify(&bytes)
+            .with_context(|| format!("corrupt SQLite object {hash}"))?;
+        Ok(bytes)
+    }
+
+    fn write(&self, data: &[u8]) -> Result<Hash> {
+        let hash = Hash::digest(data);
+        let connection = self.connection()?;
+        let inserted = connection.execute(
+            "INSERT OR IGNORE INTO objects(hash, data) VALUES (?1, ?2)",
+            params![&hash.0[..], data],
+        )?;
+        if inserted == 0 {
+            let existing: Vec<u8> = connection.query_row(
+                "SELECT data FROM objects WHERE hash = ?1",
+                params![&hash.0[..]],
+                |row| row.get(0),
+            )?;
+            hash.verify(&existing)?;
+            if existing != data {
+                bail!("hash collision while writing object {hash}");
+            }
+        }
+        Ok(hash)
+    }
+
+    fn list(&self) -> Result<Vec<Hash>> {
+        let connection = self.connection()?;
+        let mut statement = connection.prepare("SELECT hash FROM objects")?;
+        let rows = statement.query_map([], |row| row.get::<_, Vec<u8>>(0))?;
+        let mut hashes = Vec::new();
+        for row in rows {
+            let bytes = row?;
+            let array: [u8; 32] = bytes
+                .try_into()
+                .map_err(|bytes: Vec<u8>| anyhow::anyhow!("invalid hash length {}", bytes.len()))?;
+            hashes.push(Hash(array));
+        }
+        Ok(hashes)
+    }
+
+    fn delete(&self, hash: Hash) -> Result<()> {
+        self.connection()?
+            .execute("DELETE FROM objects WHERE hash = ?1", params![&hash.0[..]])?;
+        Ok(())
+    }
+
+    fn begin_batch(&self) -> Result<()> {
+        let connection = self.connection()?;
+        if !connection.is_autocommit() {
+            bail!("SQLite object batch is already active");
+        }
+        connection.execute_batch("BEGIN IMMEDIATE")?;
+        Ok(())
+    }
+
+    fn commit_batch(&self) -> Result<()> {
+        let connection = self.connection()?;
+        if connection.is_autocommit() {
+            bail!("no SQLite object batch is active");
+        }
+        connection.execute_batch("COMMIT")?;
+        Ok(())
+    }
+
+    fn rollback_batch(&self) -> Result<()> {
+        let connection = self.connection()?;
+        if !connection.is_autocommit() {
+            connection.execute_batch("ROLLBACK")?;
+        }
+        Ok(())
     }
 }

@@ -1,7 +1,7 @@
 # 修复完成审计
 
 审计日期：2026-08-09  
-审计对象：`chunklog` 0.2.0 实现、论文、实验与复现材料  
+审计对象：`chunklog` 0.3.0 实现、论文、实验与复现材料
 结论：修复计划中影响论文真实性和数据安全的 P0/P1 问题已经关闭；论文主张已缩小到现有证明与归档实验能够支持的范围。
 
 ## 已关闭事项
@@ -27,10 +27,11 @@ cargo clippy --all-targets --offline -- -D warnings PASS
 cargo test --offline --no-fail-fast                PASS
 cargo test --all-targets --offline --no-run        PASS
 cargo doc --no-deps --offline                      PASS
+rustup 1.86: cargo check/test --locked --offline   PASS
 git diff --check                                   PASS
 ```
 
-测试结果为 2 个 CLI 单元测试、43 个集成测试和 1 个 doctest，全部通过。集成测试包含 100 轮确定性状态机、合法对象全截断语料、伪随机解码语料、内容篡改、路径穿越、writer lock、增量路径上界及两类 GC 故障注入。CI 保留 MSRV 1.86 与覆盖率任务，并将主测试扩展为 Ubuntu/Windows 矩阵；该矩阵需在提交到 GitHub 后由远端实际执行。
+测试结果为 2 个 CLI 单元测试、45 个集成测试和 1 个 doctest，全部通过。集成测试包含 100 轮确定性状态机、合法对象全截断语料、伪随机解码语料、内容篡改、路径穿越、writer lock、增量路径上界、SQLite commit/rollback、对象事务失败时禁止发布 HEAD，以及两类 GC 故障注入。CI 保留 MSRV 1.86 与覆盖率任务，并将主测试扩展为 Ubuntu/Windows 矩阵；该矩阵需在提交到 GitHub 后由远端实际执行。
 
 ## 实验归档
 
@@ -40,15 +41,23 @@ git diff --check                                   PASS
 - `paper-results/luanti-workload.md`：2,023 个 Luanti mapblock 聚合为 289 个列 payload 的结果。
 - `paper-workloads/run-luanti.ps1`：真实引擎生成和导入的复现入口。
 
-## 明确不作为 0.2.0 主张的事项
+## 0.3.0 初始导入专项修复
+
+- 根因：N=1,000 的持久化树会生成大量小型 Branch/Leaf/Blob；loose store 对每个对象执行独立 create/write/rename，NTFS 元数据操作支配总耗时。
+- 修复：默认 `SqliteStore` 将完整 canonical object 存入单个 `WITHOUT ROWID` 表；一次 repository commit 对应一个 `BEGIN IMMEDIATE`/`COMMIT` 对象事务，之后才发布 ref。
+- 同版本 Criterion 对照：N=1,000 loose-file 中位数 10,427.392 ms，SQLite 中位数 47.433 ms，约 220× 加速。
+- 扩展规模：SQLite N=10,000 初始导入中位数 1,156.306 ms。
+- 回归检查：k=1 提交为 10.446/13.577 ms，load 为 21.221/222.167 ms，logical checkout 为 5.225/7.765 ms（N=100/1,000）。
+
+## 明确不作为 0.3.0 主张的事项
 
 下列事项不是隐藏的未关闭缺陷，而是论文已经公开陈述的边界：
 
-- 不保证突然断电时所有对象均已持久化，也不提供跨文件事务。
-- GC sweep 不是 all-or-nothing；只保证可达对象安全以及重试性。
+- SQLite 使用 rollback journal 与 `synchronous=FULL`，但对象事务与文件系统 ref 不构成一个跨文件事务。
+- 默认 SQLite GC sweep 是事务性的；generic/loose store 只保证可达对象安全及重试性。
 - 不提供无版本旧实验格式的迁移命令；此格式缺少可靠的类型/版本判据，当前策略是 fail closed。
 - Luanti 实验是受控 singlenode 序列化兼容性实验，不代表生产玩家编辑历史或生产性能。
-- file-per-Merkle-node 后端的初始导入明显慢于 raw-file baseline；在 packfile/数据库后端完成前不主张生产竞争力。
+- SQLite 已消除主要 small-file 瓶颈，但单主机 synthetic 结果仍不足以主张生产竞争力。
 - logical checkout 不包含世界物化和引擎激活。
 
 这些边界也同步记录在 `README.md`、`FORMAT.md`、`paper.md` 与 `CLAIMS_EVIDENCE.md` 中。

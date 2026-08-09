@@ -12,17 +12,18 @@ use atomicwrites::{AllowOverwrite, AtomicFile};
 use crate::diff::WorldDiff;
 use crate::gc::GcStats;
 use crate::object::{parse_hash, ChunkCoords, Commit, Hash, Object, TreeNode};
-use crate::store::{FilesystemStore, ObjectStore};
+use crate::store::{FilesystemStore, ObjectStore, SqliteStore};
 
 const CHUNKLOG_DIR: &str = ".chunklog";
 const HEAD_FILE: &str = ".chunklog/HEAD";
 const FORMAT_FILE: &str = ".chunklog/FORMAT";
 const OBJECTS_DIR: &str = ".chunklog/objects";
+const OBJECTS_DB: &str = ".chunklog/objects.sqlite3";
 const REFS_HEADS_DIR: &str = ".chunklog/refs/heads";
 const STAGING_DIR: &str = ".chunklog/staging";
 const LOCK_FILE: &str = ".chunklog/LOCK";
 const DEFAULT_BRANCH: &str = "main";
-const REPOSITORY_FORMAT: &str = "1\n";
+const REPOSITORY_FORMAT: &str = "2\n";
 const TREE_DEPTH: usize = 16;
 
 /// A world snapshot: chunk coordinates mapped to opaque chunk data.
@@ -108,14 +109,41 @@ pub struct Repository<S> {
     current_branch: Option<String>,
 }
 
-impl Repository<FilesystemStore> {
-    /// Creates a repository using the filesystem object store.
+impl Repository<SqliteStore> {
+    /// Creates a repository using the transactional SQLite object store.
     pub fn init(path: &Path) -> Result<Self> {
+        initialize_repository(path)?;
+        let store = SqliteStore::new(path.join(OBJECTS_DB))?;
+        Ok(Self {
+            root: path.to_path_buf(),
+            store,
+            head: None,
+            current_branch: Some(DEFAULT_BRANCH.to_string()),
+        })
+    }
+
+    /// Opens a repository using the transactional SQLite object store.
+    pub fn open(path: &Path) -> Result<Self> {
+        validate_repository(path)?;
+        let store = SqliteStore::new(path.join(OBJECTS_DB))?;
+        let (current_branch, head) = read_head(path)?;
+        Ok(Self {
+            root: path.to_path_buf(),
+            store,
+            head,
+            current_branch,
+        })
+    }
+}
+
+impl Repository<FilesystemStore> {
+    /// Creates a format-2 repository using the legacy loose-file object store.
+    pub fn init_loose(path: &Path) -> Result<Self> {
         Self::init_with(FilesystemStore::new(path.join(OBJECTS_DIR)), path)
     }
 
-    /// Opens a repository using the filesystem object store.
-    pub fn open(path: &Path) -> Result<Self> {
+    /// Opens a format-2 repository using the legacy loose-file object store.
+    pub fn open_loose(path: &Path) -> Result<Self> {
         Self::open_with(FilesystemStore::new(path.join(OBJECTS_DIR)), path)
     }
 }
@@ -123,18 +151,7 @@ impl Repository<FilesystemStore> {
 impl<S: ObjectStore> Repository<S> {
     /// Creates a repository using a custom object store.
     pub fn init_with(store: S, path: &Path) -> Result<Self> {
-        let chunklog_dir = path.join(CHUNKLOG_DIR);
-        if chunklog_dir.exists() {
-            bail!("repository already exists at {}", path.display());
-        }
-        fs::create_dir_all(chunklog_dir.join("objects"))?;
-        fs::create_dir_all(chunklog_dir.join("refs/heads"))?;
-        fs::create_dir_all(path.join(STAGING_DIR))?;
-        atomic_write(&path.join(FORMAT_FILE), REPOSITORY_FORMAT.as_bytes())?;
-        atomic_write(
-            &path.join(HEAD_FILE),
-            format!("ref: refs/heads/{DEFAULT_BRANCH}").as_bytes(),
-        )?;
+        initialize_repository(path)?;
         Ok(Self {
             root: path.to_path_buf(),
             store,
@@ -145,16 +162,7 @@ impl<S: ObjectStore> Repository<S> {
 
     /// Opens an existing repository using a custom object store.
     pub fn open_with(store: S, path: &Path) -> Result<Self> {
-        let chunklog_dir = path.join(CHUNKLOG_DIR);
-        if !chunklog_dir.is_dir() {
-            bail!("not a chunklog repository at {}", path.display());
-        }
-        let format = fs::read_to_string(path.join(FORMAT_FILE)).context(
-            "repository has no supported FORMAT marker; pre-v1 repositories require migration",
-        )?;
-        if format.trim() != REPOSITORY_FORMAT.trim() {
-            bail!("unsupported repository format: {}", format.trim());
-        }
+        validate_repository(path)?;
         let (current_branch, head) = read_head(path)?;
         Ok(Self {
             root: path.to_path_buf(),
@@ -177,16 +185,22 @@ impl<S: ObjectStore> Repository<S> {
     pub fn commit_snapshot(&mut self, world: &World, message: &str) -> Result<Hash> {
         let _lock = self.lock()?;
         self.refresh_head()?;
-        let mut changes = BTreeMap::new();
-        for (&coords, payload) in world {
-            let blob = self.write_object(&Object::Blob(payload.clone()))?;
-            changes.insert(coords, Some(blob));
-        }
-        let root = match self.apply_tree_changes(None, 0, &changes)? {
-            Some(root) => root,
-            None => self.empty_tree()?,
-        };
-        self.finish_commit(root, message)
+        self.store.begin_batch()?;
+        let result = (|| {
+            let mut changes = BTreeMap::new();
+            for (&coords, payload) in world {
+                let blob = self.write_object(&Object::Blob(payload.clone()))?;
+                changes.insert(coords, Some(blob));
+            }
+            let root = match self.apply_tree_changes(None, 0, &changes)? {
+                Some(root) => root,
+                None => self.empty_tree()?,
+            };
+            self.write_commit(root, message)
+        })();
+        let hash = self.finish_object_batch(result)?;
+        self.publish_commit(hash)?;
+        Ok(hash)
     }
 
     /// Applies an incremental change set to HEAD and creates a commit.
@@ -202,27 +216,33 @@ impl<S: ObjectStore> Repository<S> {
         }
         let _lock = self.lock()?;
         self.refresh_head()?;
-        let base_root = match self.head {
-            Some(head) => self.read_commit(head)?.tree,
-            None => self.empty_tree()?,
-        };
-        let mut encoded = BTreeMap::new();
-        for (&coords, payload) in &changes.upserts {
-            let blob = self.write_object(&Object::Blob(payload.clone()))?;
-            encoded.insert(coords, Some(blob));
-        }
-        for &coords in &changes.removals {
-            encoded.insert(coords, None);
-        }
-        let root = if encoded.is_empty() {
-            base_root
-        } else {
-            match self.apply_tree_changes(Some(base_root), 0, &encoded)? {
-                Some(root) => root,
+        self.store.begin_batch()?;
+        let result = (|| {
+            let base_root = match self.head {
+                Some(head) => self.read_commit(head)?.tree,
                 None => self.empty_tree()?,
+            };
+            let mut encoded = BTreeMap::new();
+            for (&coords, payload) in &changes.upserts {
+                let blob = self.write_object(&Object::Blob(payload.clone()))?;
+                encoded.insert(coords, Some(blob));
             }
-        };
-        self.finish_commit(root, message)
+            for &coords in &changes.removals {
+                encoded.insert(coords, None);
+            }
+            let root = if encoded.is_empty() {
+                base_root
+            } else {
+                match self.apply_tree_changes(Some(base_root), 0, &encoded)? {
+                    Some(root) => root,
+                    None => self.empty_tree()?,
+                }
+            };
+            self.write_commit(root, message)
+        })();
+        let hash = self.finish_object_batch(result)?;
+        self.publish_commit(hash)?;
+        Ok(hash)
     }
 
     /// Loads the complete world represented by `commit`.
@@ -346,16 +366,35 @@ impl<S: ObjectStore> Repository<S> {
                 other => bail!("invalid tree object {hash} at depth {depth}: {other:?}"),
             }
         }
-        let all = self.store.list()?;
-        let mut removed = 0;
-        for hash in all {
-            if !reachable.contains(&hash) {
-                self.store.delete(hash)?;
-                removed += 1;
+        self.store.begin_batch()?;
+        let sweep = (|| {
+            let all = self.store.list()?;
+            let mut removed = 0;
+            for hash in all {
+                if !reachable.contains(&hash) {
+                    self.store.delete(hash)?;
+                    removed += 1;
+                }
             }
-        }
-        let retained = self.store.list()?.len();
-        Ok(GcStats { removed, retained })
+            let retained = self.store.list()?.len();
+            Ok(GcStats { removed, retained })
+        })();
+        let stats = match sweep {
+            Ok(stats) => {
+                if let Err(error) = self.store.commit_batch() {
+                    let _ = self.store.rollback_batch();
+                    return Err(error).context("failed to commit garbage-collection batch");
+                }
+                stats
+            }
+            Err(error) => {
+                self.store
+                    .rollback_batch()
+                    .context("failed to roll back garbage-collection batch")?;
+                return Err(error);
+            }
+        };
+        Ok(stats)
     }
 
     /// Creates a branch at the current HEAD.
@@ -481,7 +520,7 @@ impl<S: ObjectStore> Repository<S> {
         &self.store
     }
 
-    fn finish_commit(&mut self, tree: Hash, message: &str) -> Result<Hash> {
+    fn write_commit(&self, tree: Hash, message: &str) -> Result<Hash> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .context("system clock is before the unix epoch")?
@@ -492,13 +531,33 @@ impl<S: ObjectStore> Repository<S> {
             timestamp,
             message: message.to_string(),
         };
-        let hash = self.write_object(&Object::Commit(commit))?;
+        self.write_object(&Object::Commit(commit))
+    }
+
+    fn finish_object_batch(&self, result: Result<Hash>) -> Result<Hash> {
+        let hash = match result {
+            Ok(hash) => hash,
+            Err(error) => {
+                self.store
+                    .rollback_batch()
+                    .context("failed to roll back object batch")?;
+                return Err(error);
+            }
+        };
+        if let Err(error) = self.store.commit_batch() {
+            let _ = self.store.rollback_batch();
+            return Err(error).context("failed to commit object batch");
+        }
+        Ok(hash)
+    }
+
+    fn publish_commit(&mut self, hash: Hash) -> Result<()> {
         match &self.current_branch {
             Some(name) => atomic_write(&self.ref_path(name)?, hash.to_string().as_bytes())?,
             None => atomic_write(&self.root.join(HEAD_FILE), hash.to_string().as_bytes())?,
         }
         self.head = Some(hash);
-        Ok(hash)
+        Ok(())
     }
 
     fn refresh_head(&mut self) -> Result<()> {
@@ -667,6 +726,36 @@ fn coord_nibble(coords: ChunkCoords, depth: usize) -> u8 {
 
 fn coord_key(coords: ChunkCoords) -> u64 {
     ((coords.0 as u32 as u64) << 32) | coords.1 as u32 as u64
+}
+
+fn initialize_repository(path: &Path) -> Result<()> {
+    let chunklog_dir = path.join(CHUNKLOG_DIR);
+    if chunklog_dir.exists() {
+        bail!("repository already exists at {}", path.display());
+    }
+    fs::create_dir_all(chunklog_dir.join("objects"))?;
+    fs::create_dir_all(chunklog_dir.join("refs/heads"))?;
+    fs::create_dir_all(path.join(STAGING_DIR))?;
+    atomic_write(&path.join(FORMAT_FILE), REPOSITORY_FORMAT.as_bytes())?;
+    atomic_write(
+        &path.join(HEAD_FILE),
+        format!("ref: refs/heads/{DEFAULT_BRANCH}").as_bytes(),
+    )?;
+    Ok(())
+}
+
+fn validate_repository(path: &Path) -> Result<()> {
+    let chunklog_dir = path.join(CHUNKLOG_DIR);
+    if !chunklog_dir.is_dir() {
+        bail!("not a chunklog repository at {}", path.display());
+    }
+    let format = fs::read_to_string(path.join(FORMAT_FILE)).context(
+        "repository has no supported FORMAT marker; pre-v2 repositories require migration",
+    )?;
+    if format.trim() != REPOSITORY_FORMAT.trim() {
+        bail!("unsupported repository format: {}", format.trim());
+    }
+    Ok(())
 }
 
 fn read_head(path: &Path) -> Result<(Option<String>, Option<Hash>)> {

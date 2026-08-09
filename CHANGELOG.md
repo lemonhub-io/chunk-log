@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.0] - 2026-08-09
+
+### Added
+
+- Added a verified SQLite CAS backed by one database file and explicit object-write batches.
+- Added `Repository::<FilesystemStore>::init_loose` and `open_loose` for loose-file compatibility and performance comparisons.
+
+### Changed
+
+- New repositories now use `SqliteStore` by default and write every commit's objects in one SQLite transaction before publishing its ref.
+- Bumped the repository marker to format 2; format-1 loose repositories are rejected rather than silently opened with the wrong backend.
+- GC deletion is transactional on `SqliteStore`; custom and loose stores retain their documented backend-specific semantics.
+
+### Performance
+
+- On the documented Windows/NTFS host, the N=1,000 initial snapshot median fell from 10.427 s with loose files to 47.433 ms with SQLite (about 220× faster).
+- The SQLite initial-snapshot median was 1.156 s at N=10,000.
+
 ## [0.2.0] - 2026-08-09
 
 ### Changed

@@ -1,28 +1,49 @@
-# chunklog repository format 1
+# chunklog repository format 2
 
-This document defines the durable format used by the current implementation. Integer fields are big-endian. Hashes are 32-byte BLAKE3 digests of the complete canonical object bytes.
+This document defines the durable format used by `chunklog` 0.3.0. Integer fields in canonical objects are big-endian. Hashes are 32-byte BLAKE3 digests of the complete canonical object bytes.
 
 ## Repository layout
 
 ```text
 .chunklog/
-├── FORMAT          # `1\n`
+├── FORMAT          # `2\n`
 ├── HEAD            # `ref: refs/heads/<name>` or a 64-hex commit address
 ├── LOCK            # present only while a writer is active
-├── objects/        # files named by lowercase 64-hex address
+├── objects.sqlite3 # default SQLite content-addressed object store
 ├── refs/heads/     # validated branch-name files containing commit addresses
 └── staging/        # incremental CLI patch
 ```
 
-Repositories without `FORMAT`, including the former experimental postcard format, are rejected rather than guessed or silently mixed with format 1.
+Repositories without `FORMAT`, the former experimental postcard layout, and format-1 loose repositories are rejected rather than guessed or silently mixed with format 2. The optional `FilesystemStore` keeps objects as `.chunklog/objects/<hex-hash>` files and is opened explicitly through `init_loose`/`open_loose`; it uses the same format-2 canonical object model but different physical storage.
+
+## SQLite object store
+
+The default store is a SQLite database containing:
+
+```sql
+CREATE TABLE objects (
+    hash BLOB PRIMARY KEY NOT NULL CHECK(length(hash) = 32),
+    data BLOB NOT NULL
+) WITHOUT ROWID;
+```
+
+It uses rollback journaling, `synchronous=FULL`, a 30-second busy timeout, and one application writer guarded by `.chunklog/LOCK`. `hash` is the raw 32-byte BLAKE3 address. Every returned `data` value is rehashed before use.
+
+All objects for one repository commit are inserted under `BEGIN IMMEDIATE` and made visible with one `COMMIT`. The object transaction commits before HEAD or a branch ref is replaced. Therefore:
+
+1. failure before the SQLite commit rolls back all new object rows and leaves the ref unchanged;
+2. failure after the SQLite commit but before ref replacement may leave unreachable objects, which GC can reclaim;
+3. a ref is never deliberately published before its referenced objects commit.
+
+The SQLite database transaction does not include the filesystem ref replacement, so the overall repository commit is not a cross-file transaction.
 
 ## Canonical object envelope
 
-Every object starts with:
+The repository marker is format 2, while the canonical object envelope remains wire version 1:
 
 ```text
 43 48 4c 47       # ASCII `CHLG`
-01                # object format version
+01                # canonical object version
 tag               # object type
 ```
 
@@ -45,7 +66,7 @@ Branches are sparse `nibble → child hash` maps. Empty worlds use one empty bra
 
 ## Integrity
 
-On every object read, the implementation hashes the full bytes and verifies that the digest equals the requested filename/address. Existing objects are verified before an idempotent write succeeds. Repository code repeats this check for custom stores.
+On every object read, the implementation hashes the complete canonical bytes and verifies that the digest equals the requested address. Existing objects are verified before an idempotent write succeeds. Repository code repeats this check for custom stores.
 
 ## References and writers
 
@@ -53,8 +74,6 @@ Branch names are validated before path construction and must be a single non-hid
 
 HEAD and branch files are written through a synced temporary file and platform atomic replacement. Mutating operations create `.chunklog/LOCK` with `create_new`; concurrent writers fail. A process crash can leave a stale lock, which must only be removed after an operator confirms that no writer is active.
 
-Object publication and reference publication are ordered, so ordinary process interruption before a reference update can leave unreachable immutable objects but cannot make a reference point to a partially published object. The default file-per-object backend does not issue a durability barrier for every object and therefore does not claim sudden-power-loss durability. The overall commit is not a cross-file transaction.
-
 ## Garbage collection
 
-GC holds the writer lock, snapshots HEAD and all branch roots, verifies and marks every reachable Commit, Tree node and Blob, and only then sweeps unmarked addresses. A marking error performs no deletion. A delete failure can leave a prefix of unreachable objects deleted; GC is idempotent and safe to retry, but sweep is not crash-atomic.
+GC holds the writer lock, snapshots HEAD and all branch roots, verifies and marks every reachable Commit, Tree node and Blob, and only then sweeps unmarked addresses. A marking error performs no deletion. On `SqliteStore`, all deletes occur in one SQLite transaction and a failure rolls them back. The generic `ObjectStore` contract does not require transactional deletion; loose/custom backends remain retryable but may retain a partially completed sweep.

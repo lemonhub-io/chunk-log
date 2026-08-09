@@ -1,4 +1,6 @@
-use chunklog::{FilesystemStore, ObjectStore};
+use std::collections::HashMap;
+
+use chunklog::{FilesystemStore, ObjectStore, Repository, SqliteStore};
 use tempfile::tempdir;
 
 #[test]
@@ -44,4 +46,31 @@ fn list_and_delete() {
     store.delete(h1).unwrap();
     assert_eq!(store.list().unwrap(), vec![h2]);
     store.delete(h1).unwrap();
+}
+
+#[test]
+fn sqlite_batches_and_explicit_loose_repository_work() {
+    let dir = tempdir().unwrap();
+    let store = SqliteStore::new(dir.path().join("objects.sqlite3")).unwrap();
+
+    store.begin_batch().unwrap();
+    let rolled_back = store.write(b"rolled back").unwrap();
+    store.rollback_batch().unwrap();
+    assert!(store.read(rolled_back).is_err());
+
+    store.begin_batch().unwrap();
+    let committed = store.write(b"committed").unwrap();
+    store.commit_batch().unwrap();
+    assert_eq!(store.read(committed).unwrap(), b"committed");
+    assert_eq!(store.list().unwrap(), vec![committed]);
+
+    let loose_root = dir.path().join("loose-repository");
+    let mut loose = Repository::<FilesystemStore>::init_loose(&loose_root).unwrap();
+    let world = HashMap::from([((3, -4), vec![7, 8, 9])]);
+    let commit = loose
+        .commit_snapshot(&world, "loose compatibility")
+        .unwrap();
+    drop(loose);
+    let reopened = Repository::<FilesystemStore>::open_loose(&loose_root).unwrap();
+    assert_eq!(reopened.load(commit).unwrap(), world);
 }

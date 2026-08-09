@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::fs;
 
 use chunklog::{FilesystemStore, ObjectStore, Repository};
+use rusqlite::{params, Connection};
 use tempfile::tempdir;
 
 #[test]
@@ -24,11 +25,13 @@ fn repository_rejects_a_tampered_blob() {
         .commit_snapshot(&HashMap::from([((0, 0), vec![1, 2, 3])]), "base")
         .unwrap();
     let blob = repo.chunk_hashes(commit).unwrap()[0].1;
-    fs::write(
-        dir.path().join(".chunklog/objects").join(blob.to_string()),
-        b"silent corruption",
-    )
-    .unwrap();
+    let connection = Connection::open(dir.path().join(".chunklog/objects.sqlite3")).unwrap();
+    connection
+        .execute(
+            "UPDATE objects SET data = ?1 WHERE hash = ?2",
+            params![b"silent corruption".as_slice(), &blob.0[..]],
+        )
+        .unwrap();
     assert!(repo.load(commit).is_err());
     assert!(repo.collect_garbage().is_err());
 }
@@ -63,6 +66,8 @@ fn branch_paths_cannot_escape_refs_directory() {
 fn unsupported_or_missing_repository_format_is_rejected() {
     let dir = tempdir().unwrap();
     Repository::init(dir.path()).unwrap();
+    fs::write(dir.path().join(".chunklog/FORMAT"), "1\n").unwrap();
+    assert!(Repository::open(dir.path()).is_err());
     fs::write(dir.path().join(".chunklog/FORMAT"), "999\n").unwrap();
     assert!(Repository::open(dir.path()).is_err());
     fs::remove_file(dir.path().join(".chunklog/FORMAT")).unwrap();

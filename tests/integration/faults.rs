@@ -12,6 +12,46 @@ struct FaultingStore {
     delete_calls: AtomicUsize,
 }
 
+#[derive(Default)]
+struct CommitFailingStore {
+    staged: RwLock<HashMap<Hash, Vec<u8>>>,
+}
+
+impl ObjectStore for CommitFailingStore {
+    fn read(&self, hash: Hash) -> Result<Vec<u8>> {
+        self.staged
+            .read()
+            .unwrap()
+            .get(&hash)
+            .cloned()
+            .ok_or_else(|| anyhow!("missing {hash}"))
+    }
+
+    fn write(&self, bytes: &[u8]) -> Result<Hash> {
+        let hash = Hash::digest(bytes);
+        self.staged.write().unwrap().insert(hash, bytes.to_vec());
+        Ok(hash)
+    }
+
+    fn list(&self) -> Result<Vec<Hash>> {
+        Ok(self.staged.read().unwrap().keys().copied().collect())
+    }
+
+    fn delete(&self, hash: Hash) -> Result<()> {
+        self.staged.write().unwrap().remove(&hash);
+        Ok(())
+    }
+
+    fn commit_batch(&self) -> Result<()> {
+        bail!("injected object transaction commit failure")
+    }
+
+    fn rollback_batch(&self) -> Result<()> {
+        self.staged.write().unwrap().clear();
+        Ok(())
+    }
+}
+
 impl FaultingStore {
     fn new() -> Self {
         Self {
@@ -110,4 +150,21 @@ fn interrupted_sweep_is_safe_to_retry() {
     let stats = repo.collect_garbage().unwrap();
     assert!(stats.removed > 0);
     assert_eq!(repo.load(main).unwrap().get(&(0, 0)).unwrap(), &[1]);
+}
+
+#[test]
+fn failed_object_transaction_never_publishes_head() {
+    let dir = tempdir().unwrap();
+    let mut repo = Repository::init_with(CommitFailingStore::default(), dir.path()).unwrap();
+
+    assert!(repo
+        .commit_snapshot(&HashMap::from([((0, 0), vec![1])]), "must fail")
+        .is_err());
+    assert_eq!(repo.head(), None);
+    assert!(repo.store().list().unwrap().is_empty());
+    assert!(dir
+        .path()
+        .join(".chunklog/refs/heads/main")
+        .try_exists()
+        .is_ok_and(|exists| !exists));
 }

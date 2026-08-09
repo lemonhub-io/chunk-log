@@ -12,7 +12,7 @@
 use std::collections::HashMap;
 
 use anyhow::Result;
-use chunklog::{FilesystemStore, Hash, ObjectStore, Repository};
+use chunklog::{Hash, ObjectStore, Repository};
 
 /// Chunk edge length in blocks.
 const CHUNK_SIZE: i32 = 16;
@@ -85,7 +85,7 @@ impl VoxelGame {
     }
 
     /// Saves the current world as a commit.
-    fn save(&mut self, repo: &mut Repository<FilesystemStore>, message: &str) -> Result<Hash> {
+    fn save<S: ObjectStore>(&mut self, repo: &mut Repository<S>, message: &str) -> Result<Hash> {
         repo.commit(&self.chunks, message)
     }
 }
