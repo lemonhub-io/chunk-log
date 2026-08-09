@@ -5,7 +5,6 @@ use std::io::ErrorKind;
 use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use sha2::{Digest, Sha256};
 
 use crate::object::{parse_hash, Hash};
 
@@ -58,7 +57,7 @@ impl ObjectStore for FilesystemStore {
     }
 
     fn write(&self, data: &[u8]) -> Result<Hash> {
-        let hash = Hash(Sha256::digest(data).into());
+        let hash = Hash(blake3::hash(data).into());
         let path = self.objects_dir.join(hash.to_string());
         if path.exists() {
             return Ok(hash);

@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Content-addressed object store with SHA-256 hashing and automatic
+- Content-addressed object store with BLAKE3 hashing and automatic
   deduplication of chunk blobs.
 - Git-inspired object model: `Blob` (raw chunk bytes), `Tree`
   (coordinate -> hash mapping), `Commit` (root tree, parent, timestamp,

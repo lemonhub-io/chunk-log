@@ -4,9 +4,8 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
-/// A content hash (SHA-256).
+/// A content hash (BLAKE3).
 ///
 /// Hashes identify objects in a store and are derived from the object's
 /// serialized bytes, which makes them deterministic and content-addressed.
@@ -48,7 +47,7 @@ pub struct Commit {
 impl Object {
     /// Computes the content hash of this object.
     pub fn hash(&self) -> Hash {
-        Hash(Sha256::digest(self.to_bytes()).into())
+        Hash(blake3::hash(&self.to_bytes()).into())
     }
 
     /// Serializes this object to bytes.

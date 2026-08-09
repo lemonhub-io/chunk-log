@@ -19,7 +19,7 @@ and sound and complete garbage collection — and we present chunklog, a
 Rust library and CLI that instantiates the model for voxel worlds. A
 33-test suite verifies the model invariants across filesystem and
 in-memory storage backends; criterion benchmarks confirm the complexity
-theorems (constant-time checkout of 1.2–1.9 ms from 100 to 10,000
+theorems (constant-time checkout of 1.1–1.2 ms from 100 to 10,000
 chunks); and a controlled deduplication study shows repository growth
 matching the model's closed form `N + Rk + 2(R+1)` objects to the
 object, for worlds of N=1024 chunks across R=50 saves editing k ∈
@@ -109,7 +109,7 @@ C = Z × Z. Write dom(W) for the domain of W. A *payload* p ∈ Σ is a
 serialized, engine-defined chunk; the versioning system treats all
 payloads as opaque.
 
-A *hash function* H : Σ → {0,1}^256 models SHA-256. We assume
+A *hash function* H : Σ → {0,1}^256 models BLAKE3 [35]. We assume
 collision resistance in the standard sense: for any polynomial-time
 adversary, the probability of finding p ≠ p′ with H(p) = H(p′) is
 negligible. All results below are conditional on this assumption and on
@@ -475,7 +475,7 @@ chunklog is implemented in Rust (edition 2021, MSRV 1.85), roughly
 700 lines of library code plus a ~270-line CLI, with
 `#![forbid(unsafe_code)]` and full API documentation enforced by
 `#![warn(missing_docs)]`. Serialization uses Serde + bincode; hashing
-uses SHA-256 via the `sha2` crate; the CLI uses clap. Source layout
+uses BLAKE3 via the `blake3` crate; the CLI uses clap. Source layout
 mirrors the model:
 
 - `object` — Hash, Object (Tree/Commit), canonical serialization.
@@ -542,23 +542,24 @@ chunks.
 
 | Operation | 100 | 1,000 | 10,000 |
 | --- | ---: | ---: | ---: |
-| commit | 7.7 ms | 38.5 ms | 313.8 ms |
-| load (full world) | 3.4 ms | 21.3 ms | 200.4 ms |
-| checkout | 1.2 ms | 1.3 ms | 1.9 ms |
-| naive full copy (baseline) | 14.4 ms | 254.9 ms | 1,956 ms |
+| commit | 4.2 ms | 20.7 ms | 159.5 ms |
+| load (full world) | 2.9 ms | 18.9 ms | 172.6 ms |
+| checkout | 1.1 ms | 1.1 ms | 1.2 ms |
+| naive full copy (baseline) | 8.9 ms | 119.9 ms | 1,236 ms |
 
-*Table 1: median time per operation, 256-byte payloads.*
+*Table 1: median time per operation, 256-byte payloads, BLAKE3 hashing.*
 
-**Theorem 2 confirmed.** Checkout grows 1.2 → 1.9 ms over a 100× world
-increase — within process noise, and consistent with O(1) reference
+**Theorem 2 confirmed.** Checkout stays at 1.1 → 1.2 ms over a 100×
+world increase — within process noise, and consistent with O(1) reference
 rewriting. This is the headline operational property: switching
 versions never touches data.
 
-**Theorem 1 bounds commit.** Commit throughput is ≈32K chunks/s,
-load ≈50K chunks/s, bounded by per-object hashing and file I/O. The
-incremental property means amortized save cost is k/N of these figures
-for k edited chunks; at 10,000 chunks with 1% edits, a save is
-≈2% of a naive full copy's cost.
+**Theorem 1 bounds commit.** Commit throughput is ≈50–60K chunks/s
+(48K at 1,000 chunks, 63K at 10,000), load ≈50–58K chunks/s, bounded by
+per-object hashing and file I/O. The incremental property means
+amortized save cost is k/N of these figures for k edited chunks; at
+10,000 chunks with 1% edits, a save is ≈1.5% of a naive full copy's
+cost.
 
 **The tree-rebuild term.** Theorem 1 is a storage-side statement; the
 computational side is measured separately. We committed a world of
@@ -567,21 +568,21 @@ editing one chunk each, in the release profile:
 
 | measurement | time |
 | --- | ---: |
-| full commit (1,024 chunks) | 415.9 ms |
-| 20 incremental commits (k = 1) | 407.3 ms total (≈20.4 ms each) |
+| full commit (1,024 chunks) | 413.4 ms |
+| 20 incremental commits (k = 1) | 412.9 ms total (≈20.6 ms each) |
 
 *Table 2: incremental vs. full commit time.*
 
 One incremental commit costs ≈5% of a full commit, and the per-save
-budget is dominated not by blob I/O but by rebuilding, serializing, and
-hashing the 1,024-entry canonical tree. This is the O(N) computational
-term of Theorem 1's corollary: the model's I/O advantage is
-unconditional, while its compute advantage depends on tree size.
-Section 8.3 discusses persistent (incremental) tree encodings that
-would reduce this term to O(k) as well.
+budget is dominated not by blob hashing or I/O but by rebuilding,
+serializing, and hashing the 1,024-entry canonical tree. This is the
+O(N) computational term of Theorem 1's corollary: the model's I/O
+advantage is unconditional, while its compute advantage depends on tree
+size. Section 8.3 discusses persistent (incremental) tree encodings
+that would reduce this term to O(k) as well.
 
-**Naive baseline.** At 10,000 chunks commit is 314 ms vs 1,956 ms for
-copying every payload — a 6.2× save-time reduction — with storage
+**Naive baseline.** At 10,000 chunks commit is 160 ms vs 1,236 ms for
+copying every payload — a 7.7× save-time reduction — with storage
 savings in addition.
 
 ### 7.3 The closed form, verified
@@ -606,12 +607,12 @@ copies by factors of 52,224/1,176 ≈ 44× (k = 1), 32× (k = 10), and
 8.5× (k = 100) in object count. Note that object count ≠ byte count:
 small blob objects (256 B) amortize per-object metadata poorly, and
 byte-level ratios are lower (5.6×, 5.4×, 1.9× including all tree and
-commit serialization overhead and SHA-256-length addressing). Section
+commit serialization overhead and BLAKE3-length addressing). Section
 7.4 analyzes this overhead precisely.
 
 ### 7.4 Metadata overhead analysis
 
-With 256 B payloads, each blob file carries one SHA-256 (32 B) in its
+With 256 B payloads, each blob file carries one BLAKE3 digest (32 B) in its
 address and bincode-free raw bytes; trees serialize
 ≈ 8 B (coords) + 32 B (hash) + bincode framing per entry; commits are
 ≈ 100 B. At N = 1024, R = 50, k = 10, the store holds 1,626 objects
@@ -649,7 +650,7 @@ formalized.
 | Dimension | Full-copy backups | File/block COW snapshots [13,14] | Git (files) [5] | CAS image tools [8,11,12] | MVCC DBs [33,34] | Process checkpoints [30] | **chunklog** |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Versioning unit | whole state | block | file | block/object | record | process memory | **chunk (coordinate-addressed)** |
-| Content addressing | none | none (COW) | yes | yes | hashes on writes | none | **yes (SHA-256)** |
+| Content addressing | none | none (COW) | yes | yes | hashes on writes | none | **yes (BLAKE3)** |
 | Version semantics | snapshot | snapshot | snapshot | snapshot | record-version | snapshot | **snapshot** |
 | Switch cost | copy all | pointer (block) | pointer (ref) | pointer | pointer | restart+restore | **O(1) reference** |
 | Lazy materialization | no | partial (page cache) | partial (checkout) | yes | no | no | **explicit (`load`/`chunk_hashes`)** |
@@ -856,3 +857,7 @@ Definitive Guide*. Sebastopol, CA: O'Reilly Media, 2010.
 
 [34] Datomic, "The immutable database." [Online]. Available:
 https://www.datomic.com
+
+[35] J.-P. Aumasson, S. Neves, Z. O'Hearn, and C. Winner, "BLAKE3: one
+function, fast everywhere," presented at Real World Crypto, 2020.
+[Online]. Available: https://github.com/BLAKE3-team/BLAKE3

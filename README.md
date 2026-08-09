@@ -10,7 +10,7 @@ Godot, or your own.
 
 ## Features
 
-- **Content-addressed storage** — chunk data is addressed by its SHA-256
+- **Content-addressed storage** — chunk data is addressed by its BLAKE3
   hash, so identical chunks are stored once, automatically.
 - **Incremental saves** — a commit of a mostly unchanged world only writes
   the chunks that changed.
@@ -100,7 +100,7 @@ chunklog gc                         # delete unreachable objects
 ### Object model
 
 Three kinds of objects live in `.chunklog/objects/`, each addressed by the
-SHA-256 hash of its content:
+BLAKE3 hash of its content:
 
 - **Blob** — raw chunk bytes (as provided by the game, e.g. compressed).
 - **Tree** — mapping of chunk coordinates to blob hashes.
