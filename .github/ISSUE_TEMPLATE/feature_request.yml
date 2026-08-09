@@ -1,0 +1,26 @@
+name: Feature request
+description: Suggest an idea for chunklog
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What problem are you trying to solve? Describe the use case.
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What behavior or API would address the problem?
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: What workarounds or alternative designs did you consider?
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Anything else relevant (links, sketches, examples).

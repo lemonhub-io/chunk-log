@@ -1,183 +1,182 @@
-# chunklog Project Plan
+# chunklog
 
-## 1. Overview
+**Version control for voxel worlds** — a standalone Rust library and CLI,
+inspired by Git's object model, that treats a voxel world's chunks like
+files in a repository.
 
-chunklog is a standalone, version‑control library for voxel worlds, inspired by Git’s object model. It provides content‑addressed storage, deduplication, instant checkouts, and native branching for any voxel game engine.
+`World` (chunk coordinates → compressed chunk data) goes in, commit history
+comes out. Any voxel engine can use it — LemonCraft, Veloren, Minetest,
+Godot, or your own.
 
-**Primary Goals**:
-- Decouple storage logic from game code (usable by LemonCraft, Veloren, Minetest, Godot, etc.).
-- Offer a CLI for world management and a Rust crate for integration.
-- Eliminate data duplication and corruption through immutable commits.
-- Keep operations fast (O(1) checkout, incremental saving).
+## Features
 
----
+- **Content-addressed storage** — chunk data is addressed by its SHA-256
+  hash, so identical chunks are stored once, automatically.
+- **Incremental saves** — a commit of a mostly unchanged world only writes
+  the chunks that changed.
+- **Instant checkout** — switching versions is a reference move (O(1));
+  world data is loaded on demand.
+- **Native branching** — experiment on a branch, roll back, or delete
+  branches and let `gc` reclaim their objects.
+- **Pluggable storage** — `ObjectStore` trait with a filesystem backend;
+  memory or network backends are trivial to add.
+- **No engine coupling** — the library never touches game state; it accepts
+  and returns chunk bytes.
+- **CLI + library** — the `chunklog` command line for world management, or
+  the crate for direct integration.
 
-## 2. Technology Stack
+## Status
 
-- **Language**: Rust (1.85+)
-- **Hashing**: SHA‑256 for all content hashing.
-- **Compression**: flate2 (zlib) or zstd for blob storage (deferred; games currently store their own compressed chunk bytes).
-- **Serialization**: Serde with bincode for object persistence.
-- **Concurrency**: Tokio or async‑std for future network features; currently sync with standard library.
-- **CLI**: clap for command‑line argument parsing.
-- **Testing**: Rust’s built‑in test harness + criterion for benchmarks.
+Core workflow complete and covered by tests: init, commit, load, branches,
+checkout, diff, garbage collection. **0.1.0** is the first release.
 
----
+> The original plan labeled development stages v0.1.0 → v1.0.0; that scheme
+> was abandoned and all scope ships as v0.1.0.
 
-## 3. Core Modules
+## Getting started
 
-| Module | Responsibility |
-| :----- | :-------------- |
-| **object** | Defines `Blob` (compressed chunk data), `Tree` (mapping of chunk coordinates to blob hashes), `Commit` (metadata + root tree hash). Implements serialization/deserialization. |
-| **store** | `ObjectStore` – a key‑value store (filesystem backend initially) mapping hash → object bytes. Handles read/write, deduplication (write only if missing). |
-| **repo** | `Repository` – high‑level interface: open/init, head management, commit creation, checkout, branch operations. |
-| **diff** | `WorldDiff` – added/modified/removed chunks between two commits (`Repository::diff`). Used for incremental saving and `chunklog diff`. |
-| **gc** | `GcStats` – mark-and-sweep over objects reachable from HEAD and all branch refs (`Repository::collect_garbage`). |
-| **cli** | Command‑line subcommands: `init`, `commit`, `log`, `checkout`, `branch`, `diff`, `gc`. |
+### As a library
 
----
+```toml
+[dependencies]
+chunklog = "0.1"
+```
 
-## 4. Data Flow
+```rust
+use chunklog::Repository;
+use std::collections::HashMap;
 
-### 4.1 Save (Commit)
-- Game provides a map of `(chunk_x, chunk_z) → compressed chunk data`.
-- `Repository` builds a `Tree` object from these blobs (existing blobs are reused via hashing).
-- Creates a `Commit` referencing the tree, with parent = current HEAD, timestamp, message.
-- Writes commit object, updates `HEAD` to new commit hash.
+// A world is chunk coordinates -> compressed chunk bytes.
+let mut world = HashMap::new();
+world.insert((0, 0), vec![1, 2, 3]);
 
-### 4.2 Checkout
-- Given a commit hash (or branch name), `Repository::checkout` moves `HEAD`
-  and the branch reference only — no data is copied.
-- World data is loaded separately: `Repository::load(commit)` returns all
-  chunks eagerly, or `Repository::chunk_hashes(commit)` lists
-  `(coords, blob hash)` pairs so the game can fetch blobs on demand (lazy loading).
+let mut repo = Repository::init("world.chunklog")?;
+let commit = repo.commit(&world, "initial save")?;
 
-### 4.3 Branching
-- A branch is a lightweight reference (file under `refs/heads/`) pointing to a commit hash.
-- `checkout -b new_branch` creates a new branch at current HEAD and switches to it.
-- `checkout` switches the current branch reference; checking out a commit
-  hash yields a detached HEAD.
+// ... later, restore the world of any commit:
+let restored = repo.load(commit)?;
+assert_eq!(restored, world);
+```
 
----
+See `examples/simple_game_integration.rs` for a complete game workflow
+(save, incremental save, rollback, branching, gc):
 
-## 5. Development Status
+```sh
+cargo run --example simple_game_integration
+```
 
-> **Versioning note**: This plan originally labeled each stage `v0.1.0` /
-> `v0.2.0` / `v0.3.0` / `v1.0.0`. That evolution scheme is **overturned**:
-> all scope below is completed in one cycle and ships as release
-> **v0.1.0**.
+### CLI
 
-### Foundation – Core Storage + Commit
-- [x] Object definitions (Blob, Tree, Commit)
-- [x] Filesystem object store (read/write by hash)
-- [x] Repository init, commit creation
-- [x] CLI: `init`, `commit -m`, `log` (basic)
+```sh
+cargo install chunklog
+```
 
-> `chunklog commit` reads chunk files from `.chunklog/staging/` (each file named
-> `<x>,<z>`), commits them, then clears the staging directory.
+```sh
+cd myworld
+chunklog init                       # create .chunklog/
+# drop chunk files named "<x>,<z>" into .chunklog/staging/
+chunklog commit -m "explored the plains"
+chunklog log
+chunklog branch                     # list branches (* = current)
+chunklog checkout -b experiment     # create and switch
+chunklog checkout main              # switch back
+chunklog diff                       # world changes vs. empty world
+chunklog diff main experiment       # or between two commits
+chunklog gc                         # delete unreachable objects
+```
 
-### Checkout & Branching
-- [x] Checkout (switch to any commit or branch, including detached HEAD)
-- [x] Branch creation, deletion, listing
-- [x] `HEAD` and refs management (symbolic HEAD: `ref: refs/heads/<name>`)
-- [x] CLI: `checkout` (with `-b`), `branch`
+| Command | Description |
+| --- | --- |
+| `init` | Initialize a repository (default branch `main`) |
+| `commit -m <msg>` | Commit chunk files staged in `.chunklog/staging/` (each named `<x>,<z>`) |
+| `log` | Show commit history |
+| `branch` | List branches; `branch <name>` creates; `branch -d <name>` deletes |
+| `checkout <target>` | Switch to a branch or commit hash; `-b` creates a new branch |
+| `diff [from] [to]` | Show added/modified/removed chunks (defaults: empty world → HEAD) |
+| `gc` | Remove objects unreachable from HEAD and all branches |
 
-> `switch` was merged into `checkout` (`checkout -b` creates and switches);
-> a separate command would duplicate functionality.
+## How it works
 
-### Diff & Garbage Collection
-- [x] Tree diff (show changed chunks between two commits)
-- [x] Garbage collection (mark-and-sweep over reachable objects)
-- [x] CLI: `diff`, `gc`
+### Object model
 
-### Release v0.1.0 – Stable API & Performance
-- [x] Full API documentation (rustdoc, enforced by `missing_docs`)
-- [x] Hash upgrade to SHA‑256
-- [x] Benchmark suite (commit/load/checkout vs. naive copy)
-- [x] Integration example with a simple game (`examples/simple_game_integration.rs`)
-- [x] CI/CD (GitHub Actions) with linting, tests, and coverage
+Three kinds of objects live in `.chunklog/objects/`, each addressed by the
+SHA-256 hash of its content:
 
-### Future
-- [ ] Merge / cherry‑pick across branches
+- **Blob** — raw chunk bytes (as provided by the game, e.g. compressed).
+- **Tree** — mapping of chunk coordinates to blob hashes.
+- **Commit** — root tree hash, parent hash, timestamp, message.
+
+Because hashes are content-derived, identical chunks produce identical
+blobs and are written only once — deduplication is a property of the
+addressing scheme, not a separate feature.
+
+### References
+
+- `HEAD` is symbolic: `ref: refs/heads/main` on a branch, a bare commit
+  hash when detached.
+- Branches are files in `refs/heads/` pointing at commit hashes.
+
+### Checkout
+
+`checkout` only moves references — it never copies data. World data is
+materialized separately: `load(commit)` returns the full world, or
+`chunk_hashes(commit)` lists `(coords, blob hash)` pairs so the game
+fetches only the chunks it needs.
+
+### Storage backends
+
+`ObjectStore` defines a minimal byte-level contract (`read`, `write`,
+`list`, `delete`). The default `FilesystemStore` writes objects atomically
+(temp file + rename). Custom backends (memory, network, cloud) implement
+the trait and are plugged in via `Repository::init_with` / `open_with`.
+
+### Integrating with a game
+
+1. Keep your world as `HashMap<(i32, i32), Vec<u8>>` (chunk coordinates →
+   compressed chunk bytes).
+2. On save: `repo.commit(&world, message)`.
+3. On load: `repo.load(commit)` (eager) or `repo.chunk_hashes(commit)` +
+   `store.read(hash)` (lazy).
+
+Blobs are stored exactly as provided; decompression is the game's job.
+
+## Performance
+
+Indicative figures from the criterion suite (`cargo bench`) on a desktop;
+chunk payload = 256 bytes:
+
+| Operation | 100 chunks | 1,000 chunks | 10,000 chunks |
+| --- | ---: | ---: | ---: |
+| commit | ~8 ms | ~38 ms | ~310 ms |
+| load (full world) | ~3 ms | ~21 ms | ~200 ms |
+| checkout (reference move) | ~1.2 ms | ~1.3 ms | ~1.9 ms |
+| naive full copy (baseline) | ~14 ms | ~255 ms | ~2 s |
+
+Checkout is constant-time regardless of world size; commit time grows with
+the number of *changed* chunks, not with history length.
+
+## Roadmap
+
+- [ ] Merge / cherry-pick across branches
 - [ ] Remote synchronization (like `git push/pull`)
-- [ ] Multiplayer collaboration with lock‑free merging
+- [ ] Multiplayer collaboration with lock-free merging
 - [ ] Delta compression for chunk blobs
-- [ ] Automatic pruning policies for commit history
 
----
+## Development
 
-## 6. Testing Strategy
-
-- **Unit tests**: Each module (object serialization, store read/write, diff logic) with mocked filesystem.
-- **Integration tests**: End‑to‑end tests: create repo, commit, checkout, branches, diff, gc, verify chunks.
-- **Performance benchmarks**: `cargo bench` – commit, load, and checkout for worlds of 100/1000/10000 chunks against a naive full-copy baseline.
-- **CI/CD**: GitHub Actions – formatting, clippy (`-D warnings`), tests, doctests, docs, MSRV (1.85) check, and coverage.
-
----
-
-## 7. Project Structure
-
-```
-chunklog/
-├── Cargo.toml
-├── LICENSE-MIT
-├── LICENSE-APACHE
-├── README.md
-├── .github/workflows/ci.yml
-├── src/
-│   ├── lib.rs
-│   ├── main.rs
-│   ├── object.rs
-│   ├── store.rs
-│   ├── repo.rs
-│   ├── diff.rs
-│   ├── gc.rs
-│   └── cli/
-│       ├── mod.rs
-│       ├── init.rs
-│       ├── commit.rs
-│       ├── log.rs
-│       ├── branch.rs
-│       ├── checkout.rs
-│       ├── diff.rs
-│       └── gc.rs
-├── benches/
-│   └── storage.rs
-├── tests/
-│   └── integration/
-└── examples/
-    └── simple_game_integration.rs
+```sh
+cargo test
+cargo clippy --all-targets -- -D warnings
+cargo fmt --all -- --check
+cargo doc --no-deps
+cargo bench
 ```
 
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution guide,
+[CHANGELOG.md](CHANGELOG.md) for release notes, and [SECURITY.md](SECURITY.md)
+for security reporting.
 
-## 8. Integration with Existing Engines
+## License
 
-- **LemonCraft**: Replace current world save routine with `Repository::commit()`; on load, use `Repository::load()` or `Repository::chunk_hashes()` and fetch chunks on demand.
-- **Veloren**: Similar approach; adapt to Veloren's chunk data structures.
-- **Generic**: `World` is `HashMap<(i32,i32), Vec<u8>>` – chunk coordinates to compressed chunk data. See `examples/simple_game_integration.rs` for a complete walkthrough.
-
----
-
-## 9. Licensing & Community
-
-- **License**: MIT OR Apache‑2.0 – permissive, allowing use in both open‑source and commercial projects.
-- **Community**: Aim to become a standard storage backend for voxel games. Encourage contributions via clear CONTRIBUTING.md and issue templates.
-- **Documentation**: Host API docs on docs.rs after first release.
-
----
-
-## 10. Risk Mitigation
-
-- **Hash collision**: 256‑bit SHA‑256 for all content hashing.
-- **Large commit history**: `chunklog gc` (mark-and-sweep) with optional automatic pruning policies planned.
-- **File corruption**: Objects are written atomically (temp file + rename).
-- **Performance**: Benchmark suite (`cargo bench`) tracks commit/load/checkout overhead; memory mapping for large blobs considered if needed.
-
----
-
-## 11. Status
-
-All planned scope is implemented and covered by tests; the crate is
-ready for its first release as **v0.1.0**. Remaining ideas are tracked
-under *Future* in section 5.
+Licensed under either of [MIT](LICENSE-MIT) or [Apache-2.0](LICENSE-APACHE),
+at your option.
