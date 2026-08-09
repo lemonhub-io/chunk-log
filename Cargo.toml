@@ -1,0 +1,18 @@
+[package]
+name = "chunklog"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+license = "MIT OR Apache-2.0"
+description = "A version-control library for voxel worlds"
+readme = "README.md"
+
+[dependencies]
+anyhow = "1"
+bincode = "1"
+clap = { version = "~4.4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,4 +1,3 @@
-```markdown
 # chunklog Project Plan
 
 ## 1. Overview
@@ -67,6 +66,9 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 - [x] Repository init, commit creation
 - [x] CLI: `init`, `commit -m`, `log` (basic)
 
+> `chunklog commit` reads chunk files from `.chunklog/staging/` (each file named
+> `<x>,<z>`), commits them, then clears the staging directory.
+
 ### v0.2.0 – Checkout & Branching
 - [ ] Checkout (switch to any commit or branch)
 - [ ] Branch creation, deletion, listing
@@ -103,15 +105,14 @@ chunklog is a standalone, version‑control library for voxel worlds, inspired b
 ## 7. Project Structure
 
 ```
-
 chunklog/
 ├── Cargo.toml
 ├── LICENSE-MIT
 ├── LICENSE-APACHE
 ├── README.md
-├── PLAN.md          (this document)
 ├── src/
 │   ├── lib.rs
+│   ├── main.rs
 │   ├── object.rs
 │   ├── store.rs
 │   ├── repo.rs
@@ -126,8 +127,7 @@ chunklog/
 │   ├── integration/
 │   └── benchmarks/
 └── examples/
-└── simple_game_integration.rs
-
+    └── simple_game_integration.rs
 ```
 
 ---
@@ -166,4 +166,3 @@ chunklog/
 5. Implement `commit` command in CLI to verify end‑to‑end saving.
 
 This plan keeps the project focused, modular, and deliverable in incremental milestones, while leaving room for future enhancements.
-```
