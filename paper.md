@@ -343,7 +343,7 @@ The current evidence has important limits:
 8. **No merge, remote protocol, or pruning policy.** Branches provide divergent histories but not reconciliation.
 9. **Chunk-level payloads.** Sub-chunk CDC or delta encoding would introduce additional object types and dependency edges; GC and growth theorems would have to be extended rather than assumed unchanged.
 10. **Commit metadata bounds.** Logical checkout is O(1) relative to N, not relative to an unbounded Commit message.
-11. **OPFS is not evaluated end to end.** A post-evaluation, single-host Chromium microbenchmark covers the wasm append-log `ObjectStore` and normal reopen path. The optimized store retains the complete verified log and temporarily buffers a serialized batch, so browser-memory scaling remains open. Browser-native refs, locks, staging, compaction, cross-browser tests, end-to-end repository measurements, and process-kill recovery remain future work. None of the SQLite performance results is attributed to OPFS.
+11. **OPFS is not evaluated end to end.** A post-evaluation, single-host Chromium microbenchmark covers the wasm append-log `ObjectStore` and normal reopen path. The optimized store retains the complete verified log and stages pending payloads while appending the serialized transaction to that log, so browser-memory scaling remains open. Browser-native refs, locks, staging, compaction, cross-browser tests, end-to-end repository measurements, and process-kill recovery remain future work. None of the SQLite performance results is attributed to OPFS.
 
 Immediate future work is prepared-statement and traversal profiling, recursive Merkle diff, real-engine trace evaluation, OPFS compaction and browser integration, explicit recovery tooling, and a migration command. Each changes the relevant cost or failure model and must be evaluated independently.
 
@@ -373,12 +373,26 @@ the final transaction in wasm and emitting one write/flush reduced batched
 import from 446.9 ms to 3.3 ms at N=1,000 and from 5,069.7 ms to 39.0 ms at
 N=10,000. Retaining the already verified log as the coherent read cache reduced
 the N=10,000 full-read median from 2,964.0 ms to 13.5 ms. The tradeoff is linear
-resident log memory plus temporary pending and serialized batch buffers.
+resident log memory plus pending payload buffers.
+
+A further targeted stage removed the remaining full-buffer copies at the
+Wasm/JavaScript boundary, serialized transactions directly into the retained
+log, removed an ordering-only transaction sort, and reused the immutable
+cache's verification-on-ingest invariant for direct store reads. For N=10,000,
+the consecutive targeted medians changed from 45.7 to 29.3 ms for import, 22.6
+to 12.1 ms for reopen, and 15.2 to 4.1 ms for cached full read. Durable flushes
+remain in the timed import path.
+
+Replacing one pending allocation per object with a contiguous batch arena then
+reduced the 10-sample N=10,000 import median to 26.2 ms (6.3 ms staging and
+19.8 ms commit including flush). Reopen was 12.6 ms and cached full read was
+4.1 ms. The arena retains bytes for canceled writes until the batch ends, so
+adversarial within-batch churn remains a memory-bound case.
 
 This workload writes raw object-store payloads, whereas the native SQLite table
 measures a complete Repository snapshot with Merkle construction, so the two
 tables are not directly comparable. The browser study is single-host and
-fixed-order, and normal close/reopen is not a power-loss test. Three-stage raw
+fixed-order, and normal close/reopen is not a power-loss test. Staged raw
 samples, quartiles and reproduction instructions are archived in
 `paper-results/opfs-benchmark-summary.md`.
 

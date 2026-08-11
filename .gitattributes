@@ -1,0 +1,3 @@
+# The shipped implementation is Rust. Files below are auxiliary paper and
+# browser/engine reproduction fixtures, not product source code.
+paper-workloads/** linguist-detectable=false

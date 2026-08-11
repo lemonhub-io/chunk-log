@@ -48,7 +48,15 @@ function quantile(sorted, fraction) {
 }
 
 function summarize(samples) {
-  const metrics = ["open_empty_ms", "import_ms", "reopen_ms", "read_all_ms", "physical_bytes"];
+  const metrics = [
+    "open_empty_ms",
+    "stage_writes_ms",
+    "batch_commit_ms",
+    "import_ms",
+    "reopen_ms",
+    "read_all_ms",
+    "physical_bytes",
+  ];
   const summaries = {};
   for (const scenario of [...new Set(samples.map((sample) => sample.scenario))]) {
     const selected = samples.filter((sample) => sample.scenario === scenario);
@@ -65,7 +73,7 @@ function summarize(samples) {
   return summaries;
 }
 
-const scenarios = process.env.OPFS_SMOKE ? [
+let scenarios = process.env.OPFS_SMOKE ? [
   { name: "smoke-n1", objectCount: 1, payloadSize: 256, batched: true, iterations: 1 },
 ] : [
   { name: "batched-n100", objectCount: 100, payloadSize: 256, batched: true, iterations: 9 },
@@ -74,6 +82,19 @@ const scenarios = process.env.OPFS_SMOKE ? [
   { name: "unbatched-n1000", objectCount: 1000, payloadSize: 256, batched: false, iterations: 7 },
   { name: "batched-n10000", objectCount: 10000, payloadSize: 256, batched: true, iterations: 5 },
 ];
+if (process.env.OPFS_SCENARIO) {
+  scenarios = scenarios.filter((scenario) => scenario.name === process.env.OPFS_SCENARIO);
+  if (scenarios.length === 0) {
+    throw new Error(`unknown OPFS_SCENARIO: ${process.env.OPFS_SCENARIO}`);
+  }
+}
+if (process.env.OPFS_ITERATIONS) {
+  const iterations = Number.parseInt(process.env.OPFS_ITERATIONS, 10);
+  if (!Number.isSafeInteger(iterations) || iterations < 1) {
+    throw new Error(`invalid OPFS_ITERATIONS: ${process.env.OPFS_ITERATIONS}`);
+  }
+  scenarios = scenarios.map((scenario) => ({ ...scenario, iterations }));
+}
 
 (async () => {
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -99,8 +120,8 @@ const scenarios = process.env.OPFS_SMOKE ? [
       { scenarios, runId },
     );
     const report = {
-      schema: 1,
-      implementation: "coalesced-write-log-cache",
+      schema: 2,
+      implementation: "zero-copy-io-verified-log-cache-batch-arena",
       batch_semantics_verified: true,
       generated_at: new Date().toISOString(),
       environment,

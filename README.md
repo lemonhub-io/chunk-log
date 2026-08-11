@@ -13,7 +13,7 @@ The format-2 benchmark suite and controlled Luanti integration artifact are arch
 ## Properties
 
 - **Typed content addressing:** Blob, Tree branch, Tree leaf and Commit objects have distinct canonical tags and BLAKE3 addresses.
-- **Verified reads:** object bytes are rehashed on read; silent blob or metadata corruption is rejected.
+- **Verified objects:** bytes are checked against their requested address before repository use; native stores rehash on read, while OPFS verifies bytes when they enter its immutable cache and `Repository` rechecks them before decoding.
 - **Persistent coordinate tree:** changes copy only affected paths through a fixed-depth radix Merkle tree.
 - **Two commit modes:** full snapshots have Θ(N) scanning cost; change sets update only explicitly edited coordinates.
 - **Logical checkout:** switching HEAD does not materialize world payloads.
@@ -71,11 +71,13 @@ assert_eq!(store.read(first)?, b"first canonical object");
 ```
 
 Batch the initial import so the store coalesces all records into one contiguous
-write and one durable flush instead of crossing into OPFS per object. Recovery
-exposes only fully committed batches and truncates an incomplete tail. Deletes
-are currently logical: dead records remain until a future compaction API is
-added. Opening scans and verifies the log, then retains it as the verified read
-cache for the store's lifetime.
+write and one durable flush instead of crossing into OPFS per object. The write
+and reopen paths pass direct Wasm-memory views to the synchronous access handle,
+avoiding a second multi-megabyte JavaScript buffer. Recovery exposes only fully
+committed batches and truncates an incomplete tail. Deletes are currently
+logical: dead records remain until a future compaction API is added. Opening
+scans and verifies the log, then retains it as an immutable verified cache for
+the store's lifetime.
 
 This backend covers the content-addressed object layer. The high-level
 `Repository` metadata implementation (`HEAD`, refs, locks and staging) remains
@@ -85,10 +87,11 @@ and recovery rules are specified in [OPFS_FORMAT.md](OPFS_FORMAT.md).
 A reproducible Chromium microbenchmark is available through
 `paper-workloads/run-opfs.ps1`. On the documented single Windows host, write
 coalescing reduced batched import from 446.9 ms to 3.3 ms at N=1,000 and from
-5,069.7 ms to 39.0 ms at N=10,000. Retaining the scanned log reduced the
-N=10,000 verified full-read median from 2,964.0 ms to 13.5 ms. These are
-object-layer browser measurements, not end-to-end repository results or a
-comparison with native SQLite. Full methodology and three-stage raw samples are in
+5,069.7 ms to 39.0 ms at N=10,000. Subsequent zero-copy I/O and contiguous batch
+staging reduced the targeted N=10,000 import median from 45.7 ms to 26.2 ms,
+reopen from 22.6 ms to 12.6 ms, and cached full read from 15.2 ms to 4.1 ms. These are object-layer
+browser measurements, not end-to-end repository results or a comparison with
+native SQLite. Full methodology and staged raw samples are in
 [paper-results/opfs-benchmark-summary.md](paper-results/opfs-benchmark-summary.md).
 
 ## CLI
@@ -186,6 +189,20 @@ cargo bench
 ```
 
 `CLAIMS_EVIDENCE.md` tracks paper claims against code and evidence. `REPAIR_PLAN.md` records the remediation plan, and `REPAIR_AUDIT.md` records its final implementation and verification audit. The Luanti workload can be reproduced through `paper-workloads/run-luanti.ps1`.
+
+### Repository layout and language boundary
+
+The shipped implementation is Rust. `src/`, `tests/`, `benches/`, and
+`examples/` contain the crate, its tests, and native benchmarks. The files under
+`paper-workloads/` are isolated reproduction fixtures for external environments:
+the OPFS experiment needs a small JavaScript/HTML browser host, while the Luanti
+experiment needs a Lua mod and PowerShell launchers. They are not dependencies
+of the crate and are excluded from GitHub's product-language statistics through
+`.gitattributes`. See [paper-workloads/README.md](paper-workloads/README.md) for
+the boundary and ownership rules.
+
+Measured output and archived samples belong in `paper-results/`; they must not
+be imported by production code.
 
 ## Limitations
 

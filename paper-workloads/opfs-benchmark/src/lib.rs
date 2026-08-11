@@ -65,10 +65,13 @@ pub async fn benchmark_trial(
     for object in &objects {
         hashes.push(store.write(object).map_err(browser_error)?);
     }
+    let stage_writes_ms = now()? - started;
+    let commit_started = now()?;
     if batched {
         store.commit_batch().map_err(browser_error)?;
     }
-    let import_ms = now()? - started;
+    let batch_commit_ms = now()? - commit_started;
+    let import_ms = stage_writes_ms + batch_commit_ms;
     drop(store);
 
     let started = now()?;
@@ -95,7 +98,7 @@ pub async fn benchmark_trial(
     drop(reopened);
 
     Ok(format!(
-        "{{\"file_name\":\"{file_name}\",\"object_count\":{object_count},\"payload_size\":{payload_size},\"batched\":{batched},\"open_empty_ms\":{open_empty_ms:.6},\"import_ms\":{import_ms:.6},\"reopen_ms\":{reopen_ms:.6},\"read_all_ms\":{read_all_ms:.6},\"checksum\":{checksum}}}"
+        "{{\"file_name\":\"{file_name}\",\"object_count\":{object_count},\"payload_size\":{payload_size},\"batched\":{batched},\"open_empty_ms\":{open_empty_ms:.6},\"stage_writes_ms\":{stage_writes_ms:.6},\"batch_commit_ms\":{batch_commit_ms:.6},\"import_ms\":{import_ms:.6},\"reopen_ms\":{reopen_ms:.6},\"read_all_ms\":{read_all_ms:.6},\"checksum\":{checksum}}}"
     ))
 }
 

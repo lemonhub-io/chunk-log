@@ -1,0 +1,151 @@
+{
+  "schema": 1,
+  "implementation": "coalesced-write-log-cache",
+  "batch_semantics_verified": true,
+  "generated_at": "2026-08-11T13:34:52.580Z",
+  "environment": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/131.0.0.0 Safari/537.36",
+    "hardwareConcurrency": 20,
+    "storageEstimate": {
+      "quota": 2515431138,
+      "usage": 0,
+      "usageDetails": {}
+    }
+  },
+  "scenarios": [
+    {
+      "name": "batched-n10000",
+      "objectCount": 10000,
+      "payloadSize": 256,
+      "batched": true,
+      "iterations": 5
+    }
+  ],
+  "summaries": {
+    "batched-n10000": {
+      "samples": 5,
+      "open_empty_ms": {
+        "median": 4.6,
+        "p25": 4.5,
+        "p75": 5.3
+      },
+      "stage_writes_ms": {
+        "median": 10.7,
+        "p25": 10.2,
+        "p75": 11.7
+      },
+      "batch_commit_ms": {
+        "median": 35.6,
+        "p25": 34.2,
+        "p75": 36.1
+      },
+      "import_ms": {
+        "median": 45.7,
+        "p25": 44.4,
+        "p75": 47.8
+      },
+      "reopen_ms": {
+        "median": 22.6,
+        "p25": 21.2,
+        "p75": 23.5
+      },
+      "read_all_ms": {
+        "median": 15.2,
+        "p25": 14.2,
+        "p75": 15.9
+      },
+      "physical_bytes": {
+        "median": 2970042,
+        "p25": 2970042,
+        "p75": 2970042
+      }
+    }
+  },
+  "samples": [
+    {
+      "file_name": "chunklog-opfs-1786455291810-508387a2e79258-batched-n10000-0.log",
+      "object_count": 10000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 6.6,
+      "stage_writes_ms": 12.8,
+      "batch_commit_ms": 37.4,
+      "import_ms": 50.2,
+      "reopen_ms": 25.7,
+      "read_all_ms": 20,
+      "checksum": 322797026,
+      "physical_bytes": 2970042,
+      "scenario": "batched-n10000",
+      "iteration": 0,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786455291810-508387a2e79258-batched-n10000-1.log",
+      "object_count": 10000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 5.3,
+      "stage_writes_ms": 11.7,
+      "batch_commit_ms": 36.1,
+      "import_ms": 47.8,
+      "reopen_ms": 22.6,
+      "read_all_ms": 15.2,
+      "checksum": 322797026,
+      "physical_bytes": 2970042,
+      "scenario": "batched-n10000",
+      "iteration": 1,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786455291810-508387a2e79258-batched-n10000-2.log",
+      "object_count": 10000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 4.5,
+      "stage_writes_ms": 10.7,
+      "batch_commit_ms": 33.3,
+      "import_ms": 44,
+      "reopen_ms": 21.2,
+      "read_all_ms": 15.9,
+      "checksum": 322797026,
+      "physical_bytes": 2970042,
+      "scenario": "batched-n10000",
+      "iteration": 2,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786455291810-508387a2e79258-batched-n10000-3.log",
+      "object_count": 10000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 4.5,
+      "stage_writes_ms": 10.1,
+      "batch_commit_ms": 35.6,
+      "import_ms": 45.7,
+      "reopen_ms": 20.8,
+      "read_all_ms": 14.1,
+      "checksum": 322797026,
+      "physical_bytes": 2970042,
+      "scenario": "batched-n10000",
+      "iteration": 3,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786455291810-508387a2e79258-batched-n10000-4.log",
+      "object_count": 10000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 4.6,
+      "stage_writes_ms": 10.2,
+      "batch_commit_ms": 34.2,
+      "import_ms": 44.4,
+      "reopen_ms": 23.5,
+      "read_all_ms": 14.2,
+      "checksum": 322797026,
+      "physical_bytes": 2970042,
+      "scenario": "batched-n10000",
+      "iteration": 4,
+      "warmup": false
+    }
+  ]
+}

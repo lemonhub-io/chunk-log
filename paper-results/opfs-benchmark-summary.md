@@ -2,11 +2,17 @@
 
 Date: 2026-08-11
 
-Final raw samples: [`opfs-benchmark-raw.json`](opfs-benchmark-raw.json)
+Prior full-suite samples: [`opfs-benchmark-raw.json`](opfs-benchmark-raw.json)
 
 Before optimization: [`opfs-benchmark-before-coalescing.json`](opfs-benchmark-before-coalescing.json)
 
 Write-coalescing stage: [`opfs-benchmark-after-write-coalescing.json`](opfs-benchmark-after-write-coalescing.json)
+
+Targeted pre-zero-copy baseline: [`opfs-benchmark-pre-zero-copy-targeted.json`](opfs-benchmark-pre-zero-copy-targeted.json)
+
+Targeted zero-copy result: [`opfs-benchmark-zero-copy-targeted.json`](opfs-benchmark-zero-copy-targeted.json)
+
+Targeted batch-arena result: [`opfs-benchmark-batch-arena-targeted.json`](opfs-benchmark-batch-arena-targeted.json)
 
 ## Environment
 
@@ -28,9 +34,12 @@ then removes the file. Each scenario has one excluded warm-up trial.
 `import_ms` includes BLAKE3 hashing, append-log framing, synchronous writes and
 durable `flush`. Batched trials wrap all N writes in one explicit batch;
 unbatched trials use one automatic transaction and flush per object.
+Schema-2 samples additionally split import into `stage_writes_ms` and
+`batch_commit_ms` so hashing/staging can be distinguished from serialization,
+OPFS write and flush.
 `reopen_ms` includes reading the complete log, parsing it, verifying every PUT
 digest, retaining the log cache and rebuilding the index. Final `read_all_ms`
-rehashes and copies every object from that wasm cache; it is deliberately not a
+copies every object from the immutable, already verified wasm cache; it is not a
 second OPFS disk-read measurement. Values are medians with the 25th–75th
 percentile interval, not confidence intervals.
 
@@ -39,7 +48,31 @@ rollback, pending-delete visibility, delete cancellation, committed deletion
 and close/reopen persistence. The final JSON records
 `batch_semantics_verified: true` only after these checks pass.
 
-## Final results
+## Targeted comparisons
+
+The latest stage passes Wasm slices directly to synchronous access-handle calls,
+serializes the transaction into the retained log instead of a temporary buffer,
+does not sort semantically unordered records, and avoids rehashing immutable
+cache ranges that were already verified on ingest. The next stage replaces one
+pending `Vec` allocation per object with a contiguous payload arena. All runs
+use the same batched N=10,000 scenario and one excluded warm-up; the first two
+have five measured samples and the arena stage has ten.
+
+| Metric | Pre-zero-copy | Zero-copy | Batch arena | Overall speedup |
+| --- | ---: | ---: | ---: | ---: |
+| stage writes | 10.7 ms | 7.0 ms | 6.3 ms | 1.70x |
+| batch commit, including flush | 35.6 ms | 22.3 ms | 19.8 ms | 1.80x |
+| total import | 45.7 ms | 29.3 ms | 26.2 ms | 1.74x |
+| reopen and verify | 22.6 ms | 12.1 ms | 12.6 ms | 1.79x |
+| cached full read | 15.2 ms | 4.1 ms | 4.1 ms | 3.71x |
+| physical bytes | 2,970,042 | 2,970,042 | 2,970,042 | unchanged |
+
+The optimized import corresponds to about 382,000 objects/s or 97.7 MB/s of
+payload. Individual samples still show substantial host contention; these are
+consecutive single-host medians rather than a cross-machine claim. The remaining
+commit time includes the required durable flush.
+
+## Prior full-suite results (verified log-cache stage)
 
 | Scenario | Samples | Import | Reopen | Verified cached full read | Physical bytes |
 | --- | ---: | ---: | ---: | ---: | ---: |
@@ -55,14 +88,14 @@ avoids per-object BEGIN/COMMIT records: at N=1,000 the log is 297,042 bytes
 instead of 331,008 bytes, a 10.3% physical reduction. This is framing reduction,
 not compression.
 
-The final batched N=10,000 result corresponds to approximately 256,000
+The prior batched N=10,000 result corresponds to approximately 256,000
 objects/s or 65.6 MB/s of payload during import. The verified cached read is
 about 741,000 objects/s or 189.6 MB/s. Reopening remains the operation that
 actually reads and verifies the 2.97 MB OPFS file, with an 18.6 ms median.
 
 ## Before/after attribution
 
-| Metric | N | Before | Write coalescing only | Final | Overall speedup |
+| Metric | N | Before | Write coalescing only | Verified-cache stage | Overall speedup |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | batched import | 100 | 30.1 ms | 0.7 ms | 0.9 ms | 33× |
 | batched import | 1,000 | 446.9 ms | 2.6 ms | 3.3 ms | 135× |
@@ -79,10 +112,10 @@ the durable log format or physical file size.
 
 ## Memory and interpretation boundaries
 
-- Coalescing trades I/O calls for memory: pending payloads and the serialized
-  transaction coexist during commit. The store also retains the complete log
-  for its lifetime. This is suitable for the measured sizes but still requires
-  chunked transactions or checkpoints for very large logs.
+- Coalescing trades I/O calls for memory: the contiguous pending-payload arena coexists with the
+  retained log as the transaction is appended. The OPFS call receives a direct
+  view of that Wasm memory, so no second JavaScript-sized buffer is required.
+  Very large logs still require chunked transactions or checkpoints.
 - This is a single-host, single-browser, headless microbenchmark. It does not
   establish cross-browser, mobile or production-engine performance.
 - It exercises `ObjectStore` with raw unique payloads. It is not an end-to-end
@@ -104,3 +137,4 @@ npm install --prefix paper-workloads/opfs-benchmark
 
 The runner uses a same-origin local HTTP server, a module Dedicated Worker and
 a real browser OPFS. It deletes benchmark files after every trial.
+Set `OPFS_SCENARIO=batched-n10000` to run only the targeted large-batch case.

@@ -14,12 +14,27 @@
 - Coalesced explicit OPFS batches into one contiguous write and one flush,
   removed the full-index clone at batch start, and retained the verified log as
   a coherent read cache.
+- Removed the remaining large Wasm/JavaScript copies by passing synchronous
+  access-handle reads and writes direct Wasm-memory views. Transactions now
+  serialize into the retained log, avoid an ordering-only sort, and do not
+  repeat an already-completed durable flush during close.
+- Reused the immutable cache's verification-on-ingest invariant instead of
+  rehashing each cached object on every direct `OpfsStore::read`; repository
+  decoding still performs its independent address check.
+- Replaced per-object pending payload allocations with one contiguous batch
+  arena; final changes reference byte ranges and commit scans the arena
+  sequentially without changing rollback or deduplication semantics.
 
 ### Performance
 
 - On the documented Chromium/Windows host, batched N=10,000 import fell from
   5,069.7 ms to 39.0 ms and verified cached full read fell from 2,964.0 ms to
   13.5 ms. These are single-host object-layer medians.
+- In a consecutive targeted N=10,000 comparison, zero-copy I/O and immutable
+  cache reads reduced import from 45.7 ms to 29.3 ms, reopen from 22.6 ms to
+  12.1 ms, and cached full read from 15.2 ms to 4.1 ms.
+- A subsequent 10-sample batch-arena run measured 26.2 ms import, 12.6 ms
+  reopen and 4.1 ms cached full read at N=10,000.
 
 ### Limitations
 

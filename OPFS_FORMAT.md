@@ -37,15 +37,20 @@ Record kinds and payloads are:
 | 4 | COMMIT | `u64 transaction_id` |
 
 PUT data is addressed by the BLAKE3 digest of the complete bytes supplied to
-`ObjectStore::write`. Parsing and reads verify this digest. Unknown kinds,
+`ObjectStore::write`. Opening verifies every recovered PUT before publishing
+its index entry; new PUTs are digested before entering the append-only cache.
+Reads use that verified-cache invariant, and `Repository` independently checks
+returned object addresses before decoding. Unknown kinds,
 malformed lengths, nested transactions, mismatched transaction identifiers,
 and operations outside a transaction are corruption errors.
 
 ## Commit and recovery
 
-A batch stages changes in wasm memory. Commit serializes BEGIN, the final
-PUT/DELETE view, and COMMIT into one contiguous buffer, writes that buffer with
-one synchronous access-handle call, then calls `flush`. In-memory changes are
+A batch stages payloads in one contiguous wasm-memory arena and indexes them by
+range, avoiding one allocation per object. Commit appends BEGIN, the final
+PUT/DELETE view, and COMMIT directly to the retained log, exposes that tail to
+the synchronous access handle as a zero-copy Wasm-memory view, then calls
+`flush`. In-memory changes are
 visible to the owning store during a batch, but the durable index is published
 only after the flush succeeds. Reopening applies only transactions that have a
 valid COMMIT.
@@ -64,8 +69,8 @@ durable flush.
 DELETE removes an address from the live index but does not rewrite earlier
 records. There is no compaction API in format 1. Opening is linear in log size
 and reads, verifies and retains the complete log in wasm memory as a coherent
-read cache. Commit temporarily holds pending payloads and their serialized
-transaction in addition to the retained log. Very large imports therefore need
+read cache. Commit temporarily holds the contiguous pending-payload arena while the serialized
+transaction is appended to the retained log. Very large imports therefore need
 bounded batches or a future checkpoint/segmentation design. Offsets are rejected
 above JavaScript's exact integer range (`2^53 - 1`), and browser quota, eviction
 and origin-clearing policy remain authoritative.
