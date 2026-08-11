@@ -1,18 +1,31 @@
 //! Storage backends.
 
 use std::collections::HashMap;
+#[cfg(not(target_arch = "wasm32"))]
 use std::fs;
+#[cfg(not(target_arch = "wasm32"))]
 use std::fs::OpenOptions;
+#[cfg(not(target_arch = "wasm32"))]
 use std::io::{ErrorKind, Write};
+#[cfg(not(target_arch = "wasm32"))]
 use std::path::{Path, PathBuf};
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, MutexGuard, RwLock};
+use std::sync::RwLock;
+#[cfg(not(target_arch = "wasm32"))]
+use std::sync::{Mutex, MutexGuard};
 
-use anyhow::{bail, Context, Result};
+#[cfg(not(target_arch = "wasm32"))]
+use anyhow::bail;
+use anyhow::{Context, Result};
+#[cfg(not(target_arch = "wasm32"))]
 use rusqlite::{params, Connection, OptionalExtension};
 
-use crate::object::{parse_hash, Hash};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::object::parse_hash;
+use crate::object::Hash;
 
+#[cfg(not(target_arch = "wasm32"))]
 static TEMP_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// A content-addressed key-value store mapping hashes to object bytes.
@@ -126,10 +139,12 @@ impl ObjectStore for MemoryStore {
 /// that file contents match the requested address. The default backend does
 /// not issue a power-loss durability barrier for every object; it guarantees
 /// process-level atomic publication, not survival of sudden power failure.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct FilesystemStore {
     objects_dir: PathBuf,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl FilesystemStore {
     /// Creates a store rooted at `objects_dir`.
     pub fn new(objects_dir: impl Into<PathBuf>) -> Self {
@@ -139,6 +154,7 @@ impl FilesystemStore {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ObjectStore for FilesystemStore {
     fn read(&self, hash: Hash) -> Result<Vec<u8>> {
         let path = self.objects_dir.join(hash.to_string());
@@ -217,10 +233,12 @@ impl ObjectStore for FilesystemStore {
 /// [`ObjectStore::commit_batch`] so thousands of inserts require one SQLite
 /// transaction. The database uses rollback journaling and `synchronous=FULL`;
 /// object rows are committed before repository refs are published.
+#[cfg(not(target_arch = "wasm32"))]
 pub struct SqliteStore {
     connection: Mutex<Connection>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl SqliteStore {
     /// Opens or creates a SQLite object database at `path`.
     pub fn new(path: impl AsRef<Path>) -> Result<Self> {
@@ -252,6 +270,7 @@ impl SqliteStore {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ObjectStore for SqliteStore {
     fn read(&self, hash: Hash) -> Result<Vec<u8>> {
         let connection = self.connection()?;

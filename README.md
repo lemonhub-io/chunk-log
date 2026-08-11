@@ -53,6 +53,44 @@ assert_eq!(repo.load(edited)?.len(), 2);
 
 For lazy loading, call `chunk_hashes(commit)` and then `read_chunk(blob_hash)`. Direct `ObjectStore::read` returns canonical encoded object bytes, not a decoded chunk payload.
 
+## Browser OPFS object storage
+
+On `wasm32-unknown-unknown`, `OpfsStore` implements `ObjectStore` on top of one
+append-only file in the browser's Origin Private File System. Open it from a
+dedicated worker, where `FileSystemSyncAccessHandle` is available:
+
+```rust,ignore
+use chunklog::{ObjectStore, OpfsStore};
+
+let store = OpfsStore::open("chunklog-objects.log").await?;
+store.begin_batch()?;
+let first = store.write(b"first canonical object")?;
+let second = store.write(b"second canonical object")?;
+store.commit_batch()?;
+assert_eq!(store.read(first)?, b"first canonical object");
+```
+
+Batch the initial import so the store coalesces all records into one contiguous
+write and one durable flush instead of crossing into OPFS per object. Recovery
+exposes only fully committed batches and truncates an incomplete tail. Deletes
+are currently logical: dead records remain until a future compaction API is
+added. Opening scans and verifies the log, then retains it as the verified read
+cache for the store's lifetime.
+
+This backend covers the content-addressed object layer. The high-level
+`Repository` metadata implementation (`HEAD`, refs, locks and staging) remains
+native-filesystem-only, so it is not exported on wasm. The physical log format
+and recovery rules are specified in [OPFS_FORMAT.md](OPFS_FORMAT.md).
+
+A reproducible Chromium microbenchmark is available through
+`paper-workloads/run-opfs.ps1`. On the documented single Windows host, write
+coalescing reduced batched import from 446.9 ms to 3.3 ms at N=1,000 and from
+5,069.7 ms to 39.0 ms at N=10,000. Retaining the scanned log reduced the
+N=10,000 verified full-read median from 2,964.0 ms to 13.5 ms. These are
+object-layer browser measurements, not end-to-end repository results or a
+comparison with native SQLite. Full methodology and three-stage raw samples are in
+[paper-results/opfs-benchmark-summary.md](paper-results/opfs-benchmark-summary.md).
+
 ## CLI
 
 ```text
@@ -155,6 +193,7 @@ cargo bench
 - No merge, cherry-pick, remote synchronization or multiplayer protocol.
 - Diff currently expands both trees instead of recursively skipping shared roots.
 - No migration command for the former unversioned or format-1 loose repository layout.
+- OPFS currently has no compaction and does not yet provide browser-native repository refs or staging.
 - The Luanti artifact uses controlled singlenode generation, not a production-player edit history.
 
 ## License

@@ -1,5 +1,31 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Added a wasm-only `OpfsStore` backed by one append-only OPFS file, with
+  committed-batch recovery, verified reads and initial-import batching.
+- Added a reproducible Dedicated Worker/Chromium OPFS benchmark with raw sample
+  archival and close/reopen verification.
+
+### Changed
+
+- Coalesced explicit OPFS batches into one contiguous write and one flush,
+  removed the full-index clone at batch start, and retained the verified log as
+  a coherent read cache.
+
+### Performance
+
+- On the documented Chromium/Windows host, batched N=10,000 import fell from
+  5,069.7 ms to 39.0 ms and verified cached full read fell from 2,964.0 ms to
+  13.5 ms. These are single-host object-layer medians.
+
+### Limitations
+
+- OPFS deletion is logical until compaction is implemented, and the native
+  `Repository` metadata layer is not yet available in browsers.
+
 ## [0.3.0] - 2026-08-09
 
 ### Added
@@ -46,7 +72,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0]
 
 ### Added
 

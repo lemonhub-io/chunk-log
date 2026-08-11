@@ -37,15 +37,27 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+#[cfg(not(target_arch = "wasm32"))]
 pub mod cli;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod diff;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod gc;
 pub mod object;
+pub mod opfs;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod repo;
 pub mod store;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use diff::WorldDiff;
+#[cfg(not(target_arch = "wasm32"))]
 pub use gc::GcStats;
 pub use object::{parse_hash, ChunkCoords, Commit, Hash, Object, TreeNode};
+#[cfg(target_arch = "wasm32")]
+pub use opfs::OpfsStore;
+#[cfg(not(target_arch = "wasm32"))]
 pub use repo::{Branch, ChangeSet, Checkout, LogEntry, Repository, World};
-pub use store::{FilesystemStore, MemoryStore, ObjectStore, SqliteStore};
+#[cfg(not(target_arch = "wasm32"))]
+pub use store::{FilesystemStore, SqliteStore};
+pub use store::{MemoryStore, ObjectStore};

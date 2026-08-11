@@ -12,7 +12,9 @@ use atomicwrites::{AllowOverwrite, AtomicFile};
 use crate::diff::WorldDiff;
 use crate::gc::GcStats;
 use crate::object::{parse_hash, ChunkCoords, Commit, Hash, Object, TreeNode};
-use crate::store::{FilesystemStore, ObjectStore, SqliteStore};
+#[cfg(not(target_arch = "wasm32"))]
+use crate::store::SqliteStore;
+use crate::store::{FilesystemStore, ObjectStore};
 
 const CHUNKLOG_DIR: &str = ".chunklog";
 const HEAD_FILE: &str = ".chunklog/HEAD";
@@ -109,6 +111,7 @@ pub struct Repository<S> {
     current_branch: Option<String>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Repository<SqliteStore> {
     /// Creates a repository using the transactional SQLite object store.
     pub fn init(path: &Path) -> Result<Self> {

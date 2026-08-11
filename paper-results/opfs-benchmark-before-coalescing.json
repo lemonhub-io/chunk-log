@@ -1,0 +1,749 @@
+{
+  "schema": 1,
+  "generated_at": "2026-08-11T10:52:06.800Z",
+  "environment": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/131.0.0.0 Safari/537.36",
+    "hardwareConcurrency": 20,
+    "storageEstimate": {
+      "quota": 2611671981,
+      "usage": 0,
+      "usageDetails": {}
+    }
+  },
+  "scenarios": [
+    {
+      "name": "batched-n100",
+      "objectCount": 100,
+      "payloadSize": 256,
+      "batched": true,
+      "iterations": 9
+    },
+    {
+      "name": "unbatched-n100",
+      "objectCount": 100,
+      "payloadSize": 256,
+      "batched": false,
+      "iterations": 9
+    },
+    {
+      "name": "batched-n1000",
+      "objectCount": 1000,
+      "payloadSize": 256,
+      "batched": true,
+      "iterations": 7
+    },
+    {
+      "name": "unbatched-n1000",
+      "objectCount": 1000,
+      "payloadSize": 256,
+      "batched": false,
+      "iterations": 7
+    },
+    {
+      "name": "batched-n10000",
+      "objectCount": 10000,
+      "payloadSize": 256,
+      "batched": true,
+      "iterations": 5
+    }
+  ],
+  "summaries": {
+    "batched-n100": {
+      "samples": 9,
+      "open_empty_ms": {
+        "median": 1.2,
+        "p25": 1.1,
+        "p75": 1.3
+      },
+      "import_ms": {
+        "median": 30.1,
+        "p25": 29.5,
+        "p75": 31.4
+      },
+      "reopen_ms": {
+        "median": 1.2,
+        "p25": 1.1,
+        "p75": 1.3
+      },
+      "read_all_ms": {
+        "median": 15.5,
+        "p25": 15,
+        "p75": 15.9
+      },
+      "physical_bytes": {
+        "median": 29742,
+        "p25": 29742,
+        "p75": 29742
+      }
+    },
+    "unbatched-n100": {
+      "samples": 9,
+      "open_empty_ms": {
+        "median": 1.4,
+        "p25": 1.3,
+        "p75": 1.6
+      },
+      "import_ms": {
+        "median": 85,
+        "p25": 82.8,
+        "p75": 85.5
+      },
+      "reopen_ms": {
+        "median": 1.2,
+        "p25": 1.2,
+        "p75": 1.4
+      },
+      "read_all_ms": {
+        "median": 15.8,
+        "p25": 15.4,
+        "p75": 16.3
+      },
+      "physical_bytes": {
+        "median": 33108,
+        "p25": 33108,
+        "p75": 33108
+      }
+    },
+    "batched-n1000": {
+      "samples": 7,
+      "open_empty_ms": {
+        "median": 1.8,
+        "p25": 1.5499999999999998,
+        "p75": 1.9
+      },
+      "import_ms": {
+        "median": 446.9,
+        "p25": 412.29999999999995,
+        "p75": 457
+      },
+      "reopen_ms": {
+        "median": 3.3,
+        "p25": 2.8,
+        "p75": 3.6
+      },
+      "read_all_ms": {
+        "median": 267.2,
+        "p25": 244.15,
+        "p75": 273.65
+      },
+      "physical_bytes": {
+        "median": 297042,
+        "p25": 297042,
+        "p75": 297042
+      }
+    },
+    "unbatched-n1000": {
+      "samples": 7,
+      "open_empty_ms": {
+        "median": 2.2,
+        "p25": 2.1,
+        "p75": 2.4
+      },
+      "import_ms": {
+        "median": 1393.3,
+        "p25": 1336.6,
+        "p75": 1449.5
+      },
+      "reopen_ms": {
+        "median": 3.9,
+        "p25": 3.5,
+        "p75": 4.65
+      },
+      "read_all_ms": {
+        "median": 279.5,
+        "p25": 269.65,
+        "p75": 295.6
+      },
+      "physical_bytes": {
+        "median": 331008,
+        "p25": 331008,
+        "p75": 331008
+      }
+    },
+    "batched-n10000": {
+      "samples": 5,
+      "open_empty_ms": {
+        "median": 3.4,
+        "p25": 3,
+        "p75": 3.4
+      },
+      "import_ms": {
+        "median": 5069.7,
+        "p25": 4940,
+        "p75": 5132.5
+      },
+      "reopen_ms": {
+        "median": 22,
+        "p25": 20.6,
+        "p75": 31.9
+      },
+      "read_all_ms": {
+        "median": 2964,
+        "p25": 2929.5,
+        "p75": 2987.4
+      },
+      "physical_bytes": {
+        "median": 2970042,
+        "p25": 2970042,
+        "p75": 2970042
+      }
+    }
+  },
+  "samples": [
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n100-0.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 2.2,
+      "import_ms": 29.6,
+      "reopen_ms": 1,
+      "read_all_ms": 16.1,
+      "checksum": 3225128,
+      "physical_bytes": 29742,
+      "scenario": "batched-n100",
+      "iteration": 0,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n100-1.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.3,
+      "import_ms": 31,
+      "reopen_ms": 1.2,
+      "read_all_ms": 15.9,
+      "checksum": 3225128,
+      "physical_bytes": 29742,
+      "scenario": "batched-n100",
+      "iteration": 1,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n100-2.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.1,
+      "import_ms": 28.9,
+      "reopen_ms": 1.1,
+      "read_all_ms": 13.9,
+      "checksum": 3225128,
+      "physical_bytes": 29742,
+      "scenario": "batched-n100",
+      "iteration": 2,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n100-3.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.3,
+      "import_ms": 32,
+      "reopen_ms": 1.5,
+      "read_all_ms": 17.5,
+      "checksum": 3225128,
+      "physical_bytes": 29742,
+      "scenario": "batched-n100",
+      "iteration": 3,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n100-4.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.2,
+      "import_ms": 29.5,
+      "reopen_ms": 1.2,
+      "read_all_ms": 15.4,
+      "checksum": 3225128,
+      "physical_bytes": 29742,
+      "scenario": "batched-n100",
+      "iteration": 4,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n100-5.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.1,
+      "import_ms": 30.1,
+      "reopen_ms": 1.3,
+      "read_all_ms": 15,
+      "checksum": 3225128,
+      "physical_bytes": 29742,
+      "scenario": "batched-n100",
+      "iteration": 5,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n100-6.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.1,
+      "import_ms": 28.8,
+      "reopen_ms": 1.5,
+      "read_all_ms": 15.8,
+      "checksum": 3225128,
+      "physical_bytes": 29742,
+      "scenario": "batched-n100",
+      "iteration": 6,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n100-7.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.2,
+      "import_ms": 31.7,
+      "reopen_ms": 1.2,
+      "read_all_ms": 14.7,
+      "checksum": 3225128,
+      "physical_bytes": 29742,
+      "scenario": "batched-n100",
+      "iteration": 7,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n100-8.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.1,
+      "import_ms": 31.4,
+      "reopen_ms": 1,
+      "read_all_ms": 15.5,
+      "checksum": 3225128,
+      "physical_bytes": 29742,
+      "scenario": "batched-n100",
+      "iteration": 8,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n100-0.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 1.6,
+      "import_ms": 80.9,
+      "reopen_ms": 1.2,
+      "read_all_ms": 16.3,
+      "checksum": 3225128,
+      "physical_bytes": 33108,
+      "scenario": "unbatched-n100",
+      "iteration": 0,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n100-1.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 1.2,
+      "import_ms": 85,
+      "reopen_ms": 1.6,
+      "read_all_ms": 17.1,
+      "checksum": 3225128,
+      "physical_bytes": 33108,
+      "scenario": "unbatched-n100",
+      "iteration": 1,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n100-2.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 1.6,
+      "import_ms": 85.4,
+      "reopen_ms": 1.2,
+      "read_all_ms": 15.4,
+      "checksum": 3225128,
+      "physical_bytes": 33108,
+      "scenario": "unbatched-n100",
+      "iteration": 2,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n100-3.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 2.4,
+      "import_ms": 84.9,
+      "reopen_ms": 1.2,
+      "read_all_ms": 15.2,
+      "checksum": 3225128,
+      "physical_bytes": 33108,
+      "scenario": "unbatched-n100",
+      "iteration": 3,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n100-4.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 1.4,
+      "import_ms": 87.3,
+      "reopen_ms": 1,
+      "read_all_ms": 16.1,
+      "checksum": 3225128,
+      "physical_bytes": 33108,
+      "scenario": "unbatched-n100",
+      "iteration": 4,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n100-5.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 1.2,
+      "import_ms": 82.8,
+      "reopen_ms": 1.4,
+      "read_all_ms": 15.8,
+      "checksum": 3225128,
+      "physical_bytes": 33108,
+      "scenario": "unbatched-n100",
+      "iteration": 5,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n100-6.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 2.2,
+      "import_ms": 82.5,
+      "reopen_ms": 1.5,
+      "read_all_ms": 15.4,
+      "checksum": 3225128,
+      "physical_bytes": 33108,
+      "scenario": "unbatched-n100",
+      "iteration": 6,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n100-7.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 1.3,
+      "import_ms": 85.5,
+      "reopen_ms": 1.2,
+      "read_all_ms": 15.8,
+      "checksum": 3225128,
+      "physical_bytes": 33108,
+      "scenario": "unbatched-n100",
+      "iteration": 7,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n100-8.log",
+      "object_count": 100,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 1.3,
+      "import_ms": 87.4,
+      "reopen_ms": 1.2,
+      "read_all_ms": 17,
+      "checksum": 3225128,
+      "physical_bytes": 33108,
+      "scenario": "unbatched-n100",
+      "iteration": 8,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n1000-0.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.7,
+      "import_ms": 310,
+      "reopen_ms": 2,
+      "read_all_ms": 170.9,
+      "checksum": 32332586,
+      "physical_bytes": 297042,
+      "scenario": "batched-n1000",
+      "iteration": 0,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n1000-1.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.4,
+      "import_ms": 390.9,
+      "reopen_ms": 3.5,
+      "read_all_ms": 270.9,
+      "checksum": 32332586,
+      "physical_bytes": 297042,
+      "scenario": "batched-n1000",
+      "iteration": 1,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n1000-2.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.8,
+      "import_ms": 433.7,
+      "reopen_ms": 3.7,
+      "read_all_ms": 276.4,
+      "checksum": 32332586,
+      "physical_bytes": 297042,
+      "scenario": "batched-n1000",
+      "iteration": 2,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n1000-3.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 2,
+      "import_ms": 466,
+      "reopen_ms": 3.7,
+      "read_all_ms": 299.8,
+      "checksum": 32332586,
+      "physical_bytes": 297042,
+      "scenario": "batched-n1000",
+      "iteration": 3,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n1000-4.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.8,
+      "import_ms": 504.5,
+      "reopen_ms": 3.3,
+      "read_all_ms": 238.9,
+      "checksum": 32332586,
+      "physical_bytes": 297042,
+      "scenario": "batched-n1000",
+      "iteration": 4,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n1000-5.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 1.4,
+      "import_ms": 448,
+      "reopen_ms": 2.3,
+      "read_all_ms": 249.4,
+      "checksum": 32332586,
+      "physical_bytes": 297042,
+      "scenario": "batched-n1000",
+      "iteration": 5,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n1000-6.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 2.3,
+      "import_ms": 446.9,
+      "reopen_ms": 3.3,
+      "read_all_ms": 267.2,
+      "checksum": 32332586,
+      "physical_bytes": 297042,
+      "scenario": "batched-n1000",
+      "iteration": 6,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n1000-0.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 2.1,
+      "import_ms": 1393.3,
+      "reopen_ms": 3.3,
+      "read_all_ms": 313.6,
+      "checksum": 32332586,
+      "physical_bytes": 331008,
+      "scenario": "unbatched-n1000",
+      "iteration": 0,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n1000-1.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 2.5,
+      "import_ms": 1449.5,
+      "reopen_ms": 5.1,
+      "read_all_ms": 274.6,
+      "checksum": 32332586,
+      "physical_bytes": 331008,
+      "scenario": "unbatched-n1000",
+      "iteration": 1,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n1000-2.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 2.3,
+      "import_ms": 1283.8,
+      "reopen_ms": 3.1,
+      "read_all_ms": 254.5,
+      "checksum": 32332586,
+      "physical_bytes": 331008,
+      "scenario": "unbatched-n1000",
+      "iteration": 2,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n1000-3.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 2.1,
+      "import_ms": 1458.7,
+      "reopen_ms": 4.2,
+      "read_all_ms": 264.7,
+      "checksum": 32332586,
+      "physical_bytes": 331008,
+      "scenario": "unbatched-n1000",
+      "iteration": 3,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n1000-4.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 1.7,
+      "import_ms": 1339.1,
+      "reopen_ms": 3.7,
+      "read_all_ms": 282.2,
+      "checksum": 32332586,
+      "physical_bytes": 331008,
+      "scenario": "unbatched-n1000",
+      "iteration": 4,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n1000-5.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 2.2,
+      "import_ms": 1449.5,
+      "reopen_ms": 6.8,
+      "read_all_ms": 279.5,
+      "checksum": 32332586,
+      "physical_bytes": 331008,
+      "scenario": "unbatched-n1000",
+      "iteration": 5,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-unbatched-n1000-6.log",
+      "object_count": 1000,
+      "payload_size": 256,
+      "batched": false,
+      "open_empty_ms": 2.8,
+      "import_ms": 1334.1,
+      "reopen_ms": 3.9,
+      "read_all_ms": 309,
+      "checksum": 32332586,
+      "physical_bytes": 331008,
+      "scenario": "unbatched-n1000",
+      "iteration": 6,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n10000-0.log",
+      "object_count": 10000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 3.4,
+      "import_ms": 4940,
+      "reopen_ms": 17,
+      "read_all_ms": 2734.5,
+      "checksum": 322797026,
+      "physical_bytes": 2970042,
+      "scenario": "batched-n10000",
+      "iteration": 0,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n10000-1.log",
+      "object_count": 10000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 2.5,
+      "import_ms": 5069.7,
+      "reopen_ms": 20.6,
+      "read_all_ms": 3220.4,
+      "checksum": 322797026,
+      "physical_bytes": 2970042,
+      "scenario": "batched-n10000",
+      "iteration": 1,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n10000-2.log",
+      "object_count": 10000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 3.4,
+      "import_ms": 4769.1,
+      "reopen_ms": 22,
+      "read_all_ms": 2929.5,
+      "checksum": 322797026,
+      "physical_bytes": 2970042,
+      "scenario": "batched-n10000",
+      "iteration": 2,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n10000-3.log",
+      "object_count": 10000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 3,
+      "import_ms": 5132.5,
+      "reopen_ms": 31.9,
+      "read_all_ms": 2964,
+      "checksum": 322797026,
+      "physical_bytes": 2970042,
+      "scenario": "batched-n10000",
+      "iteration": 3,
+      "warmup": false
+    },
+    {
+      "file_name": "chunklog-opfs-1786445458661-653a3b7b2c7b88-batched-n10000-4.log",
+      "object_count": 10000,
+      "payload_size": 256,
+      "batched": true,
+      "open_empty_ms": 4.5,
+      "import_ms": 5133.2,
+      "reopen_ms": 37.4,
+      "read_all_ms": 2987.4,
+      "checksum": 322797026,
+      "physical_bytes": 2970042,
+      "scenario": "batched-n10000",
+      "iteration": 4,
+      "warmup": false
+    }
+  ]
+}
